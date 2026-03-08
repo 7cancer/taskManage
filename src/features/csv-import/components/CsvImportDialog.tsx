@@ -1,4 +1,6 @@
 import { ChangeEvent, useMemo, useState } from 'react';
+import { importTasksFromCsvText } from '../../../store/actions/taskImport';
+import { useTaskStore } from '../../../store/taskStore';
 
 interface CsvPreviewState {
   fileName: string;
@@ -6,6 +8,8 @@ interface CsvPreviewState {
   header: string[];
   firstRow?: string[];
   rawHead: string;
+  importedCount: number;
+  errorCount: number;
 }
 
 function parseCsvLine(line: string): string[] {
@@ -16,6 +20,7 @@ function parseCsvLine(line: string): string[] {
 export function CsvImportDialog() {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [preview, setPreview] = useState<CsvPreviewState | null>(null);
+  const setTasks = useTaskStore((state) => state.setTasks);
 
   const summaryText = useMemo(() => {
     if (!preview) return '';
@@ -45,16 +50,26 @@ export function CsvImportDialog() {
       const header = parseCsvLine(lines[0]);
       const firstRow = lines[1] ? parseCsvLine(lines[1]) : undefined;
 
+      const importResult = importTasksFromCsvText(text);
+      setTasks(importResult.validTasks);
+
       setPreview({
         fileName: file.name,
         rowCount: Math.max(lines.length - 1, 0),
         header,
         firstRow,
         rawHead: text.slice(0, 200),
+        importedCount: importResult.validTasks.length,
+        errorCount: importResult.errors.length,
       });
 
-      // 開発中の動作確認用ログ（タスク1-3の要件）
+      if (importResult.errors.length > 0) {
+        setErrorMessage(`取込時に ${importResult.errors.length} 件のエラーがありました（正常データ ${importResult.validTasks.length} 件を反映）。`);
+      }
+
+      // 開発中の動作確認用ログ
       console.log('[CSV Preview: first 200 chars]', text.slice(0, 200));
+      console.log('[CSV Import Result]', importResult);
     } catch (error) {
       setPreview(null);
       setErrorMessage(`CSVの読込中にエラーが発生しました: ${(error as Error).message}`);
@@ -78,6 +93,9 @@ export function CsvImportDialog() {
       {preview && (
         <div style={{ marginTop: 12 }}>
           <p style={{ margin: '4px 0' }}>{summaryText}</p>
+          <p style={{ margin: '4px 0' }}>
+            取込結果: <strong>{preview.importedCount}</strong>件成功 / <strong>{preview.errorCount}</strong>件エラー
+          </p>
           <p style={{ margin: '4px 0' }}>
             ヘッダー: <code>{preview.header.join(' | ')}</code>
           </p>
