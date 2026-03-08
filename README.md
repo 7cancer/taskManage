@@ -9,6 +9,55 @@ npm install
 npm run dev
 ```
 
+## GitHub ZIP運用から `git pull` 運用へ移行する手順
+
+GitHub から ZIP を毎回ダウンロードしている場合は、最初に一度だけ Git リポジトリとして接続すると、以降は `git pull` で更新できます。
+
+### 1) Git のインストール確認
+
+```bash
+git --version
+```
+
+### 2) ZIP展開済みディレクトリでセットアップスクリプトを実行
+
+#### macOS / Linux / Git Bash
+
+```bash
+./scripts/setup-git-from-zip.sh https://github.com/<owner>/<repo>.git main
+```
+
+#### Windows PowerShell
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-git-from-zip.ps1 -RepoUrl https://github.com/<owner>/<repo>.git -Branch main
+```
+
+- 第1引数: GitHub リポジトリ URL
+- 第2引数: 追従したいブランチ名（省略時は `main`）
+
+### 3) 初回セットアップできたか確認
+
+```bash
+git rev-parse --is-inside-work-tree
+git remote -v
+git branch -vv
+```
+
+`true` が表示され、`origin` が設定され、対象ブランチに `origin/<branch>` の追跡情報があればセットアップ成功です。
+
+### 4) 日常の更新
+
+```bash
+git pull
+```
+
+### 5) 初回のみ依存関係を再取得
+
+```bash
+npm install
+```
+
 ## 主要スクリプト
 
 - `npm run dev`: 開発サーバ起動
