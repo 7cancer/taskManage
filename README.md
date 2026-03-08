@@ -24,13 +24,13 @@ git --version
 #### macOS / Linux / Git Bash
 
 ```bash
-./scripts/setup-git-from-zip.sh https://github.com/<owner>/<repo>.git main
+./scripts/setup-git-from-zip.sh https://github.com/7cancer/taskManage.git main
 ```
 
 #### Windows PowerShell
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\setup-git-from-zip.ps1 -RepoUrl https://github.com/<owner>/<repo>.git -Branch main
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-git-from-zip.ps1 -RepoUrl https://github.com/7cancer/taskManage.git -Branch main
 ```
 
 - 第1引数: GitHub リポジトリ URL
@@ -45,6 +45,8 @@ git branch -vv
 ```
 
 `true` が表示され、`origin` が設定され、対象ブランチに `origin/<branch>` の追跡情報があればセットアップ成功です。
+
+※ `origin does not appear to be a git repository` が出る場合は、`-RepoUrl`/第1引数の URL を再確認してください（例: `https://github.com/7cancer/taskManage.git`）。
 
 ### 4) 日常の更新
 
