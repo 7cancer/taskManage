@@ -18,6 +18,22 @@ function Invoke-Git {
   }
 }
 
+function Test-GitCommand {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string[]]$Args
+  )
+
+  $previousErrorActionPreference = $ErrorActionPreference
+  try {
+    $script:ErrorActionPreference = "Continue"
+    & git @Args *> $null
+    return ($LASTEXITCODE -eq 0)
+  } finally {
+    $script:ErrorActionPreference = $previousErrorActionPreference
+  }
+}
+
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
   Write-Error "git command not found. Please install Git first."
 }
@@ -29,11 +45,7 @@ if (-not (Test-Path ".git")) {
   Write-Host "[1/4] Existing .git directory found."
 }
 
-$hasOrigin = $false
-& git remote get-url origin *> $null
-if ($LASTEXITCODE -eq 0) {
-  $hasOrigin = $true
-}
+$hasOrigin = (& git remote 2>$null) -contains "origin"
 
 if ($hasOrigin) {
   Write-Host "[2/4] Updating origin URL..."
@@ -46,21 +58,12 @@ if ($hasOrigin) {
 Write-Host "[3/4] Fetching remote history..."
 Invoke-Git -Args @("fetch", "origin")
 
-$remoteBranchExists = $false
-& git rev-parse --verify "origin/$Branch" *> $null
-if ($LASTEXITCODE -eq 0) {
-  $remoteBranchExists = $true
-}
-
+$remoteBranchExists = Test-GitCommand -Args @("rev-parse", "--verify", "origin/$Branch")
 if (-not $remoteBranchExists) {
   throw "Remote branch 'origin/$Branch' was not found. Check -Branch and -RepoUrl values."
 }
 
-$localBranchExists = $false
-& git rev-parse --verify $Branch *> $null
-if ($LASTEXITCODE -eq 0) {
-  $localBranchExists = $true
-}
+$localBranchExists = Test-GitCommand -Args @("rev-parse", "--verify", $Branch)
 
 if ($localBranchExists) {
   Write-Host "[4/4] Setting local branch '$Branch' to track origin/$Branch..."

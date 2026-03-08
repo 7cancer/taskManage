@@ -35,6 +35,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup-git-from-zip.ps1 -RepoU
 
 - 第1引数: GitHub リポジトリ URL
 - 第2引数: 追従したいブランチ名（省略時は `main`）
+- `origin` リモートが未設定でも、スクリプト実行時に自動で追加されます。
 
 ### 3) 初回セットアップできたか確認
 
