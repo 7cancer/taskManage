@@ -1,10 +1,22 @@
+import { MouseEvent, useMemo, useState } from 'react';
 import { Task, TaskStatus } from '../../../domain/task/types';
+import { addTask } from '../../../store/actions/taskCrud';
+import { GanttContextMenu } from './GanttContextMenu';
+import { GanttRowTree } from './GanttRowTree';
+import { createTaskFromRightClick } from '../interactions/rightClickCreate';
+import { calculateGanttLayout, getDateOffsetDays } from '../lib/ganttLayout';
 
 interface GanttChartProps {
   tasks: Task[];
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+interface ContextMenuState {
+  x: number;
+  y: number;
+  clickedDate: Date;
+  parentTaskId?: string;
+}
+
 const BAR_COLORS: Record<TaskStatus, string> = {
   todo: '#94a3b8',
   inProgress: '#3b82f6',
@@ -12,40 +24,15 @@ const BAR_COLORS: Record<TaskStatus, string> = {
   done: '#22c55e',
 };
 
-function parseDate(dateText: string): Date | null {
-  const timestamp = Date.parse(dateText);
-  if (Number.isNaN(timestamp)) {
-    return null;
-  }
-  return new Date(timestamp);
-}
-
-function dateDiffInDays(start: Date, end: Date): number {
-  return Math.round((end.getTime() - start.getTime()) / DAY_MS);
-}
-
 function formatLabel(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
 export function GanttChart({ tasks }: GanttChartProps) {
-  const sortedTasks = [...tasks].sort((a, b) => a.displayOrder - b.displayOrder);
+  const layout = useMemo(() => calculateGanttLayout(tasks), [tasks]);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
-  const parsedRanges = sortedTasks
-    .map((task) => ({
-      task,
-      start: parseDate(task.startDate),
-      end: parseDate(task.endDate),
-    }))
-    .filter((item) => item.start && item.end)
-    .map((item) => ({
-      task: item.task,
-      start: item.start as Date,
-      end: item.end as Date,
-    }))
-    .filter((item) => item.end.getTime() >= item.start.getTime());
-
-  if (parsedRanges.length === 0) {
+  if (!layout) {
     return (
       <section style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8 }}>
         <h2 style={{ margin: '0 0 8px' }}>ガントチャート</h2>
@@ -54,24 +41,53 @@ export function GanttChart({ tasks }: GanttChartProps) {
     );
   }
 
-  const minStart = parsedRanges.reduce((min, item) => (item.start < min ? item.start : min), parsedRanges[0].start);
-  const maxEnd = parsedRanges.reduce((max, item) => (item.end > max ? item.end : max), parsedRanges[0].end);
-  const totalDays = Math.max(dateDiffInDays(minStart, maxEnd) + 1, 1);
+  const currentLayout = layout;
+
+  function handleRowContextMenu(event: MouseEvent<HTMLDivElement>, parentTaskId?: string) {
+    event.preventDefault();
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const safeWidth = rect.width || 1;
+    const relativeX = Math.min(Math.max(event.clientX - rect.left, 0), safeWidth);
+    const clickedOffsetDays = Math.floor((relativeX / safeWidth) * currentLayout.totalDays);
+    const clickedDate = new Date(currentLayout.minStart);
+    clickedDate.setDate(clickedDate.getDate() + clickedOffsetDays);
+
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      clickedDate,
+      parentTaskId,
+    });
+  }
+
+  function handleCreateTask() {
+    if (!contextMenu) return;
+
+    addTask(
+      createTaskFromRightClick({
+        clickedDate: contextMenu.clickedDate,
+        parentTaskId: contextMenu.parentTaskId,
+        tasks,
+      }),
+    );
+    setContextMenu(null);
+  }
 
   return (
     <section style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8 }}>
       <h2 style={{ margin: '0 0 8px' }}>ガントチャート</h2>
       <p style={{ margin: '0 0 12px', color: '#475569' }}>
-        期間: {formatLabel(minStart)} 〜 {formatLabel(maxEnd)}
+        期間: {formatLabel(currentLayout.minStart)} 〜 {formatLabel(currentLayout.maxEnd)}
       </p>
 
       <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 6 }}>
         <div style={{ minWidth: 960 }}>
-          {parsedRanges.map(({ task, start, end }) => {
-            const offsetDays = dateDiffInDays(minStart, start);
-            const durationDays = Math.max(dateDiffInDays(start, end) + 1, 1);
-            const leftPercent = (offsetDays / totalDays) * 100;
-            const widthPercent = (durationDays / totalDays) * 100;
+          {currentLayout.rows.map(({ task, start, end, depth }) => {
+            const offsetDays = getDateOffsetDays(currentLayout.minStart, start);
+            const durationDays = Math.max(getDateOffsetDays(start, end) + 1, 1);
+            const leftPercent = (offsetDays / currentLayout.totalDays) * 100;
+            const widthPercent = (durationDays / currentLayout.totalDays) * 100;
 
             return (
               <div
@@ -84,10 +100,13 @@ export function GanttChart({ tasks }: GanttChartProps) {
                   borderTop: '1px solid #f1f5f9',
                 }}
               >
-                <div style={{ padding: '0 10px', fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {task.taskName}
+                <div onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}>
+                  <GanttRowTree taskName={task.taskName} depth={depth} />
                 </div>
-                <div style={{ position: 'relative', height: 16, margin: '0 10px', background: '#f8fafc', borderRadius: 999 }}>
+                <div
+                  onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}
+                  style={{ position: 'relative', height: 16, margin: '0 10px', background: '#f8fafc', borderRadius: 999 }}
+                >
                   <div
                     title={`${task.startDate} - ${task.endDate}`}
                     style={{
@@ -107,6 +126,10 @@ export function GanttChart({ tasks }: GanttChartProps) {
           })}
         </div>
       </div>
+
+      {contextMenu && (
+        <GanttContextMenu x={contextMenu.x} y={contextMenu.y} onCreateTask={handleCreateTask} onClose={() => setContextMenu(null)} />
+      )}
     </section>
   );
 }
