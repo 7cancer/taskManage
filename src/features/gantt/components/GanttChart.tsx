@@ -1,4 +1,4 @@
-import { ChangeEvent, MouseEvent, useMemo, useState } from 'react';
+import { ChangeEvent, MouseEvent, useEffect, useMemo, useState } from 'react';
 import { Task, TaskStatus } from '../../../domain/task/types';
 import { addTask } from '../../../store/actions/taskCrud';
 import { GanttContextMenu } from './GanttContextMenu';
@@ -84,8 +84,17 @@ export function GanttChart({ tasks }: GanttChartProps) {
   const layout = useMemo(() => calculateGanttLayout(tasks), [tasks]);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [selectedRangeId, setSelectedRangeId] = useState<string>('1m');
+  const [selectedStartDate, setSelectedStartDate] = useState<string>('');
 
   const selectedOption = VIEW_RANGE_OPTIONS.find((item) => item.id === selectedRangeId) ?? VIEW_RANGE_OPTIONS[1];
+
+  useEffect(() => {
+    if (!layout) return;
+
+    if (!selectedStartDate) {
+      setSelectedStartDate(formatLabel(layout.minStart));
+    }
+  }, [layout, selectedStartDate]);
 
   if (!layout) {
     return (
@@ -97,8 +106,9 @@ export function GanttChart({ tasks }: GanttChartProps) {
   }
 
   const currentLayout = layout;
+  const selectedStartTimestamp = Date.parse(selectedStartDate);
+  const viewStart = Number.isNaN(selectedStartTimestamp) ? currentLayout.minStart : new Date(selectedStartTimestamp);
   const visibleDays = Math.min(selectedOption.days, currentLayout.totalDays);
-  const viewStart = currentLayout.minStart;
   const viewEnd = addDays(viewStart, visibleDays - 1);
   const timelineWidth = visibleDays * DAY_COLUMN_WIDTH;
   const dayDates = Array.from({ length: visibleDays }, (_, index) => addDays(viewStart, index));
@@ -106,6 +116,10 @@ export function GanttChart({ tasks }: GanttChartProps) {
 
   function handleRangeChange(event: ChangeEvent<HTMLSelectElement>) {
     setSelectedRangeId(event.target.value);
+  }
+
+  function handleStartDateChange(event: ChangeEvent<HTMLInputElement>) {
+    setSelectedStartDate(event.target.value);
   }
 
   function handleRowContextMenu(event: MouseEvent<HTMLDivElement>, parentTaskId?: string) {
@@ -141,10 +155,16 @@ export function GanttChart({ tasks }: GanttChartProps) {
   return (
     <section style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8 }}>
       <h2 style={{ margin: '0 0 8px' }}>ガントチャート</h2>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
-        <p style={{ margin: 0, color: '#475569' }}>
-          表示期間: {formatLabel(viewStart)} 〜 {formatLabel(viewEnd)}
-        </p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            表示開始日:
+            <input type="date" value={selectedStartDate} onChange={handleStartDateChange} />
+          </label>
+          <p style={{ margin: 0, color: '#475569' }}>
+            表示期間: {formatLabel(viewStart)} 〜 {formatLabel(viewEnd)}
+          </p>
+        </div>
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           期間:
           <select value={selectedRangeId} onChange={handleRangeChange}>
