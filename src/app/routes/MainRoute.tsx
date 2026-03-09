@@ -1,4 +1,6 @@
 import { useMemo } from 'react';
+import { TASK_STATUS_LABELS, TASK_STATUS_ORDER } from '../../domain/task/constants';
+import { Task, TaskStatus } from '../../domain/task/types';
 import { CsvImportDialog } from '../../features/csv-import/components/CsvImportDialog';
 import { GanttChart } from '../../features/gantt/components/GanttChart';
 import { useTaskStore } from '../../store/taskStore';
@@ -25,6 +27,7 @@ function groupTasksByStatus(tasks: Task[]): Record<TaskStatus, Task[]> {
 
 export function MainRoute() {
   const tasks = useTaskStore((state) => state.tasks);
+  const groupedTasks = useMemo(() => groupTasksByStatus(tasks), [tasks]);
 
   return (
     <MainLayout>
