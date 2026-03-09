@@ -38,7 +38,7 @@ const BAR_COLORS: Record<TaskStatus, string> = {
 };
 
 const LEFT_COLUMN_WIDTH = 260;
-const DAY_COLUMN_WIDTH = 36;
+const DAY_COLUMN_WIDTH = 48;
 const VIEW_RANGE_OPTIONS: ViewRangeOption[] = [
   { id: '14d', label: '2週間', days: 14 },
   { id: '1m', label: '1ヶ月', days: 31 },
@@ -177,11 +177,11 @@ export function GanttChart({ tasks }: GanttChartProps) {
         </label>
       </div>
 
-      <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 6 }}>
-        <div style={{ minWidth: LEFT_COLUMN_WIDTH + timelineWidth }}>
-          <div style={{ display: 'grid', gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px ${timelineWidth}px`, borderBottom: '1px solid #e2e8f0' }}>
-            <div style={{ padding: '8px 10px', fontWeight: 600, background: '#f8fafc' }}>タスク</div>
-            <div>
+      <div style={{ border: '1px solid #e2e8f0', borderRadius: 6 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)` }}>
+          <div style={{ padding: '8px 10px', fontWeight: 600, background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>タスク</div>
+          <div style={{ overflowX: 'auto', borderBottom: '1px solid #e2e8f0' }}>
+            <div style={{ width: timelineWidth }}>
               <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, background: '#f8fafc' }}>
                 {monthSpans.map((month) => (
                   <div
@@ -207,34 +207,37 @@ export function GanttChart({ tasks }: GanttChartProps) {
               </div>
             </div>
           </div>
+        </div>
 
-          {currentLayout.rows.map(({ task, start, end, depth }) => {
-            const startOffsetDays = getDateOffsetDays(viewStart, start);
-            const endOffsetDays = getDateOffsetDays(viewStart, end);
+        {currentLayout.rows.map(({ task, start, end, depth }) => {
+          const startOffsetDays = getDateOffsetDays(viewStart, start);
+          const endOffsetDays = getDateOffsetDays(viewStart, end);
 
-            const visibleStartDay = clamp(startOffsetDays, 0, visibleDays);
-            const visibleEndDay = clamp(endOffsetDays + 1, 0, visibleDays);
-            const visibleDurationDays = Math.max(visibleEndDay - visibleStartDay, 0);
+          const visibleStartDay = clamp(startOffsetDays, 0, visibleDays);
+          const visibleEndDay = clamp(endOffsetDays + 1, 0, visibleDays);
+          const visibleDurationDays = Math.max(visibleEndDay - visibleStartDay, 0);
 
-            return (
-              <div
-                key={task.taskId}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px ${timelineWidth}px`,
-                  alignItems: 'center',
-                  minHeight: 42,
-                  borderTop: '1px solid #f1f5f9',
-                }}
-              >
-                <div onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}>
-                  <GanttRowTree taskName={task.taskName} depth={depth} />
-                </div>
+          return (
+            <div
+              key={task.taskId}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)`,
+                alignItems: 'center',
+                minHeight: 42,
+                borderTop: '1px solid #f1f5f9',
+              }}
+            >
+              <div onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}>
+                <GanttRowTree taskName={task.taskName} depth={depth} />
+              </div>
+              <div style={{ overflowX: 'auto' }}>
                 <div
                   onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}
                   style={{
                     position: 'relative',
                     height: 24,
+                    width: timelineWidth,
                     backgroundImage: `repeating-linear-gradient(to right, #e2e8f0, #e2e8f0 1px, transparent 1px, transparent ${DAY_COLUMN_WIDTH}px)`,
                   }}
                 >
@@ -256,9 +259,9 @@ export function GanttChart({ tasks }: GanttChartProps) {
                   )}
                 </div>
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
 
       {contextMenu && (
