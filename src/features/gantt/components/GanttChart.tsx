@@ -62,8 +62,28 @@ function getBarOpacity(depth: number): number {
   return 0.75;
 }
 
-function formatLabel(date: Date): string {
-  return date.toISOString().slice(0, 10);
+function buildMonthSpans(startDate: Date, totalDays: number): MonthSpan[] {
+  const spans: MonthSpan[] = [];
+
+  for (let dayIndex = 0; dayIndex < totalDays; dayIndex += 1) {
+    const date = addDays(startDate, dayIndex);
+    const key = `${date.getFullYear()}-${date.getMonth()}`;
+    const label = `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const latest = spans[spans.length - 1];
+
+    if (latest && latest.key === key) {
+      latest.span += 1;
+      continue;
+    }
+
+    spans.push({ key, label, startIndex: dayIndex, span: 1 });
+  }
+
+  return spans;
+}
+
+function clamp(number: number, min: number, max: number): number {
+  return Math.min(Math.max(number, min), max);
 }
 
 function addDays(baseDate: Date, offset: number): Date {
@@ -334,6 +354,60 @@ export function GanttChart({ tasks }: GanttChartProps) {
             </div>
           </div>
         </div>
+
+        {currentLayout.rows.map(({ task, start, end, depth }) => {
+          const startOffsetDays = getDateOffsetDays(viewStart, start);
+          const endOffsetDays = getDateOffsetDays(viewStart, end);
+
+          const visibleStartDay = clamp(startOffsetDays, 0, visibleDays);
+          const visibleEndDay = clamp(endOffsetDays + 1, 0, visibleDays);
+          const visibleDurationDays = Math.max(visibleEndDay - visibleStartDay, 0);
+
+          return (
+            <div
+              key={task.taskId}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)`,
+                alignItems: 'center',
+                minHeight: 42,
+                borderTop: '1px solid #f1f5f9',
+              }}
+            >
+              <div onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}>
+                <GanttRowTree taskName={task.taskName} depth={depth} />
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <div
+                  onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}
+                  style={{
+                    position: 'relative',
+                    height: 24,
+                    width: timelineWidth,
+                    backgroundImage: `repeating-linear-gradient(to right, #e2e8f0, #e2e8f0 1px, transparent 1px, transparent ${DAY_COLUMN_WIDTH}px)`,
+                  }}
+                >
+                  {visibleDurationDays > 0 && (
+                    <div
+                      title={`${task.startDate} - ${task.endDate}`}
+                      style={{
+                        position: 'absolute',
+                        left: visibleStartDay * DAY_COLUMN_WIDTH,
+                        width: visibleDurationDays * DAY_COLUMN_WIDTH,
+                        minWidth: 8,
+                        top: 2,
+                        bottom: 2,
+                        borderRadius: 999,
+                        background: BAR_COLORS[task.status],
+                        opacity: 0.95,
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {contextMenu && (
