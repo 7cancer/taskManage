@@ -46,8 +46,44 @@ const VIEW_RANGE_OPTIONS: ViewRangeOption[] = [
   { id: '3m', label: '3ヶ月', days: 93 },
 ];
 
-function formatLabel(date: Date): string {
-  return date.toISOString().slice(0, 10);
+const PARENT_BAR_HEIGHT = 34;
+const CHILD_BAR_HEIGHT = 28;
+const DESCENDANT_BAR_HEIGHT = 22;
+
+function getBarHeight(depth: number): number {
+  if (depth <= 0) return PARENT_BAR_HEIGHT;
+  if (depth === 1) return CHILD_BAR_HEIGHT;
+  return DESCENDANT_BAR_HEIGHT;
+}
+
+function getBarOpacity(depth: number): number {
+  if (depth <= 0) return 0.95;
+  if (depth === 1) return 0.85;
+  return 0.75;
+}
+
+function buildMonthSpans(startDate: Date, totalDays: number): MonthSpan[] {
+  const spans: MonthSpan[] = [];
+
+  for (let dayIndex = 0; dayIndex < totalDays; dayIndex += 1) {
+    const date = addDays(startDate, dayIndex);
+    const key = `${date.getFullYear()}-${date.getMonth()}`;
+    const label = `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const latest = spans[spans.length - 1];
+
+    if (latest && latest.key === key) {
+      latest.span += 1;
+      continue;
+    }
+
+    spans.push({ key, label, startIndex: dayIndex, span: 1 });
+  }
+
+  return spans;
+}
+
+function clamp(number: number, min: number, max: number): number {
+  return Math.min(Math.max(number, min), max);
 }
 
 function addDays(baseDate: Date, offset: number): Date {
@@ -87,6 +123,8 @@ export function GanttChart({ tasks }: GanttChartProps) {
   const [selectedStartDate, setSelectedStartDate] = useState<string>('');
 
   const selectedOption = VIEW_RANGE_OPTIONS.find((item) => item.id === selectedRangeId) ?? VIEW_RANGE_OPTIONS[1];
+  const taskById = useMemo(() => new Map(tasks.map((task) => [task.taskId, task])), [tasks]);
+  const parentTaskIdSet = useMemo(() => new Set(tasks.flatMap((task) => (task.parentTaskId ? [task.parentTaskId] : []))), [tasks]);
 
   useEffect(() => {
     if (!layout) return;
@@ -179,32 +217,140 @@ export function GanttChart({ tasks }: GanttChartProps) {
 
       <div style={{ border: '1px solid #e2e8f0', borderRadius: 6 }}>
         <div style={{ display: 'grid', gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)` }}>
-          <div style={{ padding: '8px 10px', fontWeight: 600, background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>タスク</div>
-          <div style={{ overflowX: 'auto', borderBottom: '1px solid #e2e8f0' }}>
+          <div>
+            <div style={{ padding: '8px 10px', fontWeight: 600, background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>タスク</div>
+            {currentLayout.rows.map(({ task, depth }) => (
+              <div
+                key={`${task.taskId}-left`}
+                onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  minHeight: 46,
+                  borderTop: '1px solid #f1f5f9',
+                }}
+              >
+                <GanttRowTree taskName={task.taskName} depth={depth} />
+              </div>
+            ))}
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
             <div style={{ width: timelineWidth }}>
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, background: '#f8fafc' }}>
-                {monthSpans.map((month) => (
+              <div style={{ borderBottom: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, background: '#f8fafc' }}>
+                  {monthSpans.map((month) => (
+                    <div
+                      key={month.key}
+                      style={{
+                        gridColumn: `${month.startIndex + 1} / span ${month.span}`,
+                        textAlign: 'center',
+                        fontWeight: 600,
+                        padding: '8px 0 6px',
+                        borderLeft: '1px solid #e2e8f0',
+                      }}
+                    >
+                      {month.label}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, borderTop: '1px solid #e2e8f0' }}>
+                  {dayDates.map((date, index) => (
+                    <div key={index} style={{ textAlign: 'center', padding: '6px 0', borderLeft: '1px solid #e2e8f0', fontSize: 12 }}>
+                      {date.getDate()}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {currentLayout.rows.map(({ task, start, end, depth }) => {
+                const startOffsetDays = getDateOffsetDays(viewStart, start);
+                const endOffsetDays = getDateOffsetDays(viewStart, end);
+
+                const visibleStartDay = clamp(startOffsetDays, 0, visibleDays);
+                const visibleEndDay = clamp(endOffsetDays + 1, 0, visibleDays);
+                const visibleDurationDays = Math.max(visibleEndDay - visibleStartDay, 0);
+
+                const ancestorHighlights: Array<{ left: number; width: number; color: string }> = [];
+
+                if (parentTaskIdSet.has(task.taskId)) {
+                  if (visibleDurationDays > 0) {
+                    ancestorHighlights.push({
+                      left: visibleStartDay * DAY_COLUMN_WIDTH,
+                      width: visibleDurationDays * DAY_COLUMN_WIDTH,
+                      color: BAR_COLORS[task.status],
+                    });
+                  }
+                }
+
+                let currentParentId = task.parentTaskId;
+                while (currentParentId) {
+                  const parentTask = taskById.get(currentParentId);
+                  if (!parentTask) break;
+
+                  const parentStart = new Date(parentTask.startDate);
+                  const parentEnd = new Date(parentTask.endDate);
+                  if (!Number.isNaN(parentStart.getTime()) && !Number.isNaN(parentEnd.getTime()) && parentEnd >= parentStart) {
+                    const parentStartDay = clamp(getDateOffsetDays(viewStart, parentStart), 0, visibleDays);
+                    const parentEndDay = clamp(getDateOffsetDays(viewStart, parentEnd) + 1, 0, visibleDays);
+                    const parentDuration = Math.max(parentEndDay - parentStartDay, 0);
+
+                    if (parentDuration > 0) {
+                      ancestorHighlights.push({
+                        left: parentStartDay * DAY_COLUMN_WIDTH,
+                        width: parentDuration * DAY_COLUMN_WIDTH,
+                        color: BAR_COLORS[parentTask.status],
+                      });
+                    }
+                  }
+
+                  currentParentId = parentTask.parentTaskId;
+                }
+
+                return (
                   <div
-                    key={month.key}
+                    key={`${task.taskId}-right`}
+                    onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}
                     style={{
-                      gridColumn: `${month.startIndex + 1} / span ${month.span}`,
-                      textAlign: 'center',
-                      fontWeight: 600,
-                      padding: '8px 0 6px',
-                      borderLeft: '1px solid #e2e8f0',
+                      position: 'relative',
+                      height: 46,
+                      borderTop: '1px solid #f1f5f9',
+                      backgroundImage: `repeating-linear-gradient(to right, #e2e8f0, #e2e8f0 1px, transparent 1px, transparent ${DAY_COLUMN_WIDTH}px)`,
                     }}
                   >
-                    {month.label}
+                    {ancestorHighlights.map((highlight, index) => (
+                      <div
+                        key={`${task.taskId}-ancestor-${index}`}
+                        style={{
+                          position: 'absolute',
+                          left: highlight.left,
+                          width: highlight.width,
+                          top: 0,
+                          bottom: 0,
+                          background: highlight.color,
+                          opacity: 0.13,
+                        }}
+                      />
+                    ))}
+                    {visibleDurationDays > 0 && (
+                      <div
+                        title={`${task.startDate} - ${task.endDate}`}
+                        style={{
+                          position: 'absolute',
+                          left: visibleStartDay * DAY_COLUMN_WIDTH,
+                          width: visibleDurationDays * DAY_COLUMN_WIDTH,
+                          minWidth: 8,
+                          height: getBarHeight(depth),
+                          top: 23 - getBarHeight(depth) / 2,
+                          borderRadius: 2,
+                          background: BAR_COLORS[task.status],
+                          opacity: getBarOpacity(depth),
+                        }}
+                      />
+                    )}
                   </div>
-                ))}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, borderTop: '1px solid #e2e8f0' }}>
-                {dayDates.map((date, index) => (
-                  <div key={index} style={{ textAlign: 'center', padding: '6px 0', borderLeft: '1px solid #e2e8f0', fontSize: 12 }}>
-                    {date.getDate()}
-                  </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
           </div>
         </div>
