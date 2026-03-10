@@ -509,33 +509,45 @@ export function GanttChart({ tasks }: GanttChartProps) {
 
   return (
     <section style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8 }}>
-      <h2 style={{ margin: '0 0 8px' }}>ガントチャート</h2>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <button type="button" onClick={openCreateModal}>タスク新規登録</button>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            表示開始日:
-            <input type="date" value={selectedStartDate} onChange={handleStartDateChange} />
-          </label>
-          <p style={{ margin: 0, color: '#475569' }}>
-            表示期間: {formatLabel(viewStart)} 〜 {formatLabel(viewEnd)}
-          </p>
-        </div>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            期間:
-            <select value={selectedRangeId} onChange={handleRangeChange}>
-              {VIEW_RANGE_OPTIONS.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <input type="checkbox" checked={hideDoneTasks} onChange={handleHideDoneChange} />
-            完了タスクを非表示
-          </label>
+      <div
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 40,
+          background: '#fff',
+          paddingBottom: 8,
+          borderBottom: '1px solid #e2e8f0',
+          marginBottom: 12,
+        }}
+      >
+        <h2 style={{ margin: '0 0 8px' }}>ガントチャート</h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <button type="button" onClick={openCreateModal}>タスク新規登録</button>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              表示開始日:
+              <input type="date" value={selectedStartDate} onChange={handleStartDateChange} />
+            </label>
+            <p style={{ margin: 0, color: '#475569' }}>
+              表示期間: {formatLabel(viewStart)} 〜 {formatLabel(viewEnd)}
+            </p>
+          </div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              期間:
+              <select value={selectedRangeId} onChange={handleRangeChange}>
+                {VIEW_RANGE_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={hideDoneTasks} onChange={handleHideDoneChange} />
+              完了タスクを非表示
+            </label>
+          </div>
         </div>
       </div>
 
