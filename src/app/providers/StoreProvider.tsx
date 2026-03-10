@@ -1,6 +1,14 @@
-import { PropsWithChildren } from 'react';
+import { PropsWithChildren, useEffect } from 'react';
+import { saveTasksToCsvStorage, saveTasksToLocalStorage } from '../../store/actions/taskPersistence';
+import { useTaskStore } from '../../store/taskStore';
 
 export function StoreProvider({ children }: PropsWithChildren) {
-  // TODO: 必要であれば Zustand/Redux の Provider や永続化初期化を追加する。
+  const tasks = useTaskStore((state) => state.tasks);
+
+  useEffect(() => {
+    saveTasksToLocalStorage(tasks);
+    saveTasksToCsvStorage(tasks);
+  }, [tasks]);
+
   return <>{children}</>;
 }
