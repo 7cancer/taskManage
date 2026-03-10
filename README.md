@@ -24,8 +24,29 @@ npm run dev
 
 ## 配布用ZIP作成
 
+PowerShellで作業フォルダまで移動済みであれば、以下だけで作成できます。
+
+```powershell
+npm install
+npm run build:zip
+```
+
 ```bash
 npm run build:zip
+```
+
+
+Docker上で動かしている場合は、コンテナ内で以下を実行してください。
+
+```bash
+npm install
+npm run build:zip
+```
+
+ホスト側から実行する場合（コンテナ名が `taskmanage` の例）は以下です。
+
+```bash
+docker exec -it taskmanage bash -lc "cd /workspace/taskManage && npm install && npm run build:zip"
 ```
 
 `release/taskManage-build.zip` が生成されます。ZIPを解凍後、同梱の `run-local.sh` または `run-local.ps1` を実行すると、`http://localhost:4173` でアプリを利用できます。
