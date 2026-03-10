@@ -1,6 +1,6 @@
 import { ChangeEvent, MouseEvent, UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Task, TaskStatus } from '../../../domain/task/types';
-import { addTask, updateTask } from '../../../store/actions/taskCrud';
+import { addTask, updateTasks } from '../../../store/actions/taskCrud';
 import { GanttContextMenu } from './GanttContextMenu';
 import { GanttRowTree } from './GanttRowTree';
 import { createTaskFromRightClick } from '../interactions/rightClickCreate';
@@ -18,7 +18,8 @@ interface ContextMenuState {
 }
 
 interface DragState {
-  task: Task;
+  taskId: string;
+  affectedTaskIds: string[];
   startClientX: number;
 }
 
@@ -110,6 +111,24 @@ function clamp(number: number, min: number, max: number): number {
   return Math.min(Math.max(number, min), max);
 }
 
+function collectDescendantTaskIds(rootTaskId: string, childrenByParentId: Map<string, string[]>): string[] {
+  const result: string[] = [];
+  const queue = [...(childrenByParentId.get(rootTaskId) ?? [])];
+
+  while (queue.length > 0) {
+    const currentTaskId = queue.shift();
+    if (!currentTaskId) continue;
+
+    result.push(currentTaskId);
+    const children = childrenByParentId.get(currentTaskId);
+    if (children) {
+      queue.push(...children);
+    }
+  }
+
+  return result;
+}
+
 export function GanttChart({ tasks }: GanttChartProps) {
   const layout = useMemo(() => calculateGanttLayout(tasks), [tasks]);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -126,6 +145,25 @@ export function GanttChart({ tasks }: GanttChartProps) {
   const selectedOption = VIEW_RANGE_OPTIONS.find((item) => item.id === selectedRangeId) ?? VIEW_RANGE_OPTIONS[1];
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.taskId, task])), [tasks]);
   const parentTaskIdSet = useMemo(() => new Set(tasks.flatMap((task) => (task.parentTaskId ? [task.parentTaskId] : []))), [tasks]);
+  const childrenByParentId = useMemo(() => {
+    const map = new Map<string, string[]>();
+
+    tasks.forEach((task) => {
+      if (!task.parentTaskId) return;
+      const children = map.get(task.parentTaskId) ?? [];
+      children.push(task.taskId);
+      map.set(task.parentTaskId, children);
+    });
+
+    return map;
+  }, [tasks]);
+  const dragShiftByTaskId = useMemo(() => {
+    if (!dragState || dragOffsetDays === 0) {
+      return new Map<string, number>();
+    }
+
+    return new Map(dragState.affectedTaskIds.map((taskId) => [taskId, dragOffsetDays]));
+  }, [dragOffsetDays, dragState]);
 
   useEffect(() => {
     if (!layout) return;
@@ -160,7 +198,13 @@ export function GanttChart({ tasks }: GanttChartProps) {
 
   function handleBarMouseDown(event: MouseEvent<HTMLDivElement>, task: Task) {
     event.preventDefault();
-    setDragState({ task, startClientX: event.clientX });
+
+    const descendantTaskIds = collectDescendantTaskIds(task.taskId, childrenByParentId);
+    setDragState({
+      taskId: task.taskId,
+      affectedTaskIds: [task.taskId, ...descendantTaskIds],
+      startClientX: event.clientX,
+    });
     setDragOffsetDays(0);
     dragOffsetDaysRef.current = 0;
   }
@@ -179,11 +223,18 @@ export function GanttChart({ tasks }: GanttChartProps) {
       const finalOffsetDays = dragOffsetDaysRef.current;
 
       if (finalOffsetDays !== 0) {
-        updateTask({
-          ...dragState.task,
-          startDate: shiftTaskDateText(dragState.task.startDate, finalOffsetDays),
-          endDate: shiftTaskDateText(dragState.task.endDate, finalOffsetDays),
-        });
+        const nextTasks = dragState.affectedTaskIds
+          .map((taskId) => taskById.get(taskId))
+          .filter((task): task is Task => Boolean(task))
+          .map((task) => ({
+            ...task,
+            startDate: shiftTaskDateText(task.startDate, finalOffsetDays),
+            endDate: shiftTaskDateText(task.endDate, finalOffsetDays),
+          }));
+
+        if (nextTasks.length > 0) {
+          updateTasks(nextTasks);
+        }
       }
 
       setDragState(null);
@@ -198,7 +249,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
-  }, [dragState]);
+  }, [dragState, taskById]);
 
   if (!layout) {
     return (
@@ -342,9 +393,10 @@ export function GanttChart({ tasks }: GanttChartProps) {
               </div>
 
               {visibleRows.map(({ task, start, end, depth }) => {
-                const isDraggingThisTask = dragState?.task.taskId === task.taskId;
-                const effectiveStart = isDraggingThisTask ? new Date(shiftTaskDateText(task.startDate, dragOffsetDays)) : start;
-                const effectiveEnd = isDraggingThisTask ? new Date(shiftTaskDateText(task.endDate, dragOffsetDays)) : end;
+                const currentDragShift = dragShiftByTaskId.get(task.taskId) ?? 0;
+                const isDraggingThisTask = dragState?.affectedTaskIds.includes(task.taskId) ?? false;
+                const effectiveStart = currentDragShift !== 0 ? new Date(shiftTaskDateText(task.startDate, currentDragShift)) : start;
+                const effectiveEnd = currentDragShift !== 0 ? new Date(shiftTaskDateText(task.endDate, currentDragShift)) : end;
 
                 const startOffsetDays = getDateOffsetDays(viewStart, effectiveStart);
                 const endOffsetDays = getDateOffsetDays(viewStart, effectiveEnd);
@@ -370,8 +422,9 @@ export function GanttChart({ tasks }: GanttChartProps) {
                   const parentTask = taskById.get(currentParentId);
                   if (!parentTask) break;
 
-                  const parentStart = new Date(parentTask.startDate);
-                  const parentEnd = new Date(parentTask.endDate);
+                  const parentDragShift = dragShiftByTaskId.get(parentTask.taskId) ?? 0;
+                  const parentStart = new Date(shiftTaskDateText(parentTask.startDate, parentDragShift));
+                  const parentEnd = new Date(shiftTaskDateText(parentTask.endDate, parentDragShift));
                   if (!Number.isNaN(parentStart.getTime()) && !Number.isNaN(parentEnd.getTime()) && parentEnd >= parentStart) {
                     const parentStartDay = clamp(getDateOffsetDays(viewStart, parentStart), 0, visibleDays);
                     const parentEndDay = clamp(getDateOffsetDays(viewStart, parentEnd) + 1, 0, visibleDays);
@@ -417,7 +470,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
                     ))}
                     {visibleDurationDays > 0 && (
                       <div
-                        title={`${isDraggingThisTask ? shiftTaskDateText(task.startDate, dragOffsetDays) : task.startDate} - ${isDraggingThisTask ? shiftTaskDateText(task.endDate, dragOffsetDays) : task.endDate}`}
+                        title={`${isDraggingThisTask ? shiftTaskDateText(task.startDate, currentDragShift) : task.startDate} - ${isDraggingThisTask ? shiftTaskDateText(task.endDate, currentDragShift) : task.endDate}`}
                         style={{
                           position: 'absolute',
                           left: visibleStartDay * DAY_COLUMN_WIDTH,
