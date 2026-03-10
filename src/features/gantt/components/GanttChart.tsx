@@ -52,7 +52,7 @@ const BAR_COLORS: Record<TaskStatus, string> = {
 };
 
 const LEFT_COLUMN_WIDTH = 260;
-const DAY_COLUMN_WIDTH = 44;
+const DAY_COLUMN_WIDTH = 28;
 const VIEW_RANGE_OPTIONS: ViewRangeOption[] = [
   { id: '14d', label: '2週間', days: 14 },
   { id: '1m', label: '1ヶ月', days: 31 },
@@ -148,6 +148,10 @@ function isHolidayCell(date: Date): boolean {
   const dayOfWeek = date.getDay();
   if (dayOfWeek === 0 || dayOfWeek === 6) return true;
   return isJapaneseHoliday(date);
+}
+
+function isTodayCell(date: Date): boolean {
+  return formatLabel(date) === formatLabel(new Date());
 }
 
 function clamp(number: number, min: number, max: number): number {
@@ -582,6 +586,12 @@ export function GanttChart({ tasks }: GanttChartProps) {
         }}
       >
         <h2 style={{ margin: '0 0 8px' }}>ガントチャート</h2>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <span style={{ background: BAR_COLORS.todo, opacity: 0.62, color: '#0f172a', fontWeight: 600, padding: '4px 8px', borderRadius: 2, minWidth: 90, textAlign: 'center', boxSizing: 'border-box' }}>未対応</span>
+          <span style={{ background: BAR_COLORS.inProgress, opacity: 0.62, color: '#0f172a', fontWeight: 600, padding: '4px 8px', borderRadius: 2, minWidth: 90, textAlign: 'center', boxSizing: 'border-box' }}>処理中</span>
+          <span style={{ background: BAR_COLORS.review, opacity: 0.62, color: '#0f172a', fontWeight: 600, padding: '4px 8px', borderRadius: 2, minWidth: 90, textAlign: 'center', boxSizing: 'border-box' }}>処理済み</span>
+          <span style={{ background: BAR_COLORS.done, opacity: 0.62, color: '#0f172a', fontWeight: 600, padding: '4px 8px', borderRadius: 2, minWidth: 90, textAlign: 'center', boxSizing: 'border-box' }}>完了</span>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <button type="button" onClick={openCreateModal}>タスク新規登録</button>
@@ -648,7 +658,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, borderTop: '1px solid #e2e8f0' }}>
                 {dayDates.map((date, index) => (
-                  <div key={index} style={{ textAlign: 'center', padding: '2px 0', borderLeft: index === 0 ? 'none' : `${monthBoundaryIndexSet.has(index) ? 2 : 1}px solid ${monthBoundaryIndexSet.has(index) ? '#94a3b8' : '#e2e8f0'}`, background: isHolidayCell(date) ? '#e5e7eb' : '#f8fafc', fontSize: 12 }}>
+                  <div key={index} style={{ textAlign: 'center', padding: '2px 0', borderLeft: index === 0 ? 'none' : `${monthBoundaryIndexSet.has(index) ? 2 : 1}px solid ${monthBoundaryIndexSet.has(index) ? '#94a3b8' : '#e2e8f0'}`, background: isTodayCell(date) ? '#fed7aa' : isHolidayCell(date) ? '#e5e7eb' : '#f8fafc', fontSize: 12 }}>
                     {date.getDate()}
                   </div>
                 ))}
@@ -754,7 +764,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
                           width: DAY_COLUMN_WIDTH,
                           top: 0,
                           bottom: 0,
-                          background: isHolidayCell(date) ? '#f3f4f6' : 'transparent',
+                          background: isTodayCell(date) ? '#ffedd5' : isHolidayCell(date) ? '#f3f4f6' : 'transparent',
                           borderLeft: index === 0 ? 'none' : `${monthBoundaryIndexSet.has(index) ? 2 : 1}px solid ${monthBoundaryIndexSet.has(index) ? '#94a3b8' : '#e2e8f0'}`,
                           pointerEvents: 'none',
                         }}
@@ -901,6 +911,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
             </div>
           </div>
         </div>
+
 
 
 
