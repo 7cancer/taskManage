@@ -3,6 +3,7 @@ import { TASK_STATUS_LABELS, TASK_STATUS_ORDER } from '../../domain/task/constan
 import { Task, TaskStatus } from '../../domain/task/types';
 import { CsvImportDialog } from '../../features/csv-import/components/CsvImportDialog';
 import { GanttChart } from '../../features/gantt/components/GanttChart';
+import { saveTasksToCsvStorage, saveTasksToLocalStorage, serializeTasksToCsv } from '../../store/actions/taskPersistence';
 import { useTaskStore } from '../../store/taskStore';
 import { TabItem, Tabs } from '../../shared/ui/Tabs';
 import { MainLayout } from '../layout/MainLayout';
@@ -33,14 +34,96 @@ const VIEW_TABS: TabItem[] = [
 
 type ViewTab = 'gantt' | 'list';
 
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function toDateText(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function createDummyProjectTasks(): Task[] {
+  const base = new Date();
+
+  return [
+    {
+      taskId: 'P-001',
+      taskName: 'プロジェクト準備',
+      status: 'todo',
+      startDate: toDateText(addDays(base, 0)),
+      endDate: toDateText(addDays(base, 2)),
+      displayOrder: 1,
+    },
+    {
+      taskId: 'P-002',
+      taskName: '要件定義',
+      parentTaskId: 'P-001',
+      status: 'inProgress',
+      startDate: toDateText(addDays(base, 3)),
+      endDate: toDateText(addDays(base, 7)),
+      displayOrder: 2,
+    },
+    {
+      taskId: 'P-003',
+      taskName: '設計',
+      status: 'review',
+      startDate: toDateText(addDays(base, 8)),
+      endDate: toDateText(addDays(base, 12)),
+      displayOrder: 3,
+    },
+    {
+      taskId: 'P-004',
+      taskName: '実装',
+      status: 'todo',
+      startDate: toDateText(addDays(base, 13)),
+      endDate: toDateText(addDays(base, 20)),
+      displayOrder: 4,
+    },
+    {
+      taskId: 'P-005',
+      taskName: 'リリース',
+      status: 'done',
+      startDate: toDateText(addDays(base, 21)),
+      endDate: toDateText(addDays(base, 22)),
+      displayOrder: 5,
+    },
+  ];
+}
+
+function downloadCsv(csvText: string, fileName: string) {
+  const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
 export function MainRoute() {
   const tasks = useTaskStore((state) => state.tasks);
   const groupedTasks = useMemo(() => groupTasksByStatus(tasks), [tasks]);
+  const setTasks = useTaskStore((state) => state.setTasks);
   const [activeView, setActiveView] = useState<ViewTab>('gantt');
+
+  function handleCreateProject() {
+    const dummyTasks = createDummyProjectTasks();
+    setTasks(dummyTasks);
+    saveTasksToLocalStorage(dummyTasks);
+    saveTasksToCsvStorage(dummyTasks);
+    downloadCsv(serializeTasksToCsv(dummyTasks), 'project-template.csv');
+  }
 
   return (
     <MainLayout>
       <CsvImportDialog />
+      <section style={{ marginTop: 8, padding: 12, background: '#fff', borderRadius: 8 }}>
+        <button type="button" onClick={handleCreateProject}>プロジェクト作成</button>
+      </section>
       <Tabs items={VIEW_TABS} activeId={activeView} onChange={(id) => setActiveView(id as ViewTab)} />
 
       {activeView === 'gantt' ? (

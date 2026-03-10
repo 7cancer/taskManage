@@ -2,7 +2,7 @@ import { ChangeEvent, MouseEvent, UIEvent, useEffect, useMemo, useRef, useState 
 import { Task, TaskStatus } from '../../../domain/task/types';
 import { TaskFormValues, TaskModal } from '../../task-editor/components/TaskModal';
 import { generateTaskId } from '../../../shared/lib/id';
-import { addTask, removeTasks, updateTask, updateTasks } from '../../../store/actions/taskCrud';
+import { addTask, removeTasks, replaceTasks, updateTask, updateTasks } from '../../../store/actions/taskCrud';
 import { GanttContextMenu } from './GanttContextMenu';
 import { GanttRowTree } from './GanttRowTree';
 import { createTaskFromRightClick } from '../interactions/rightClickCreate';
@@ -74,9 +74,9 @@ function getBarHeight(depth: number): number {
 }
 
 function getBarOpacity(depth: number): number {
-  if (depth <= 0) return 0.95;
-  if (depth === 1) return 0.85;
-  return 0.75;
+  if (depth <= 0) return 0.62;
+  if (depth === 1) return 0.52;
+  return 0.42;
 }
 
 function formatLabel(date: Date): string {
@@ -234,16 +234,20 @@ export function GanttChart({ tasks }: GanttChartProps) {
     if (!toolbarElement) return;
 
     const updateStickyTop = () => {
-      setGanttHeaderStickyTop(toolbarElement.getBoundingClientRect().height);
+      setGanttHeaderStickyTop(Math.ceil(toolbarElement.getBoundingClientRect().height));
     };
 
     updateStickyTop();
     window.addEventListener('resize', updateStickyTop);
 
+    const resizeObserver = new ResizeObserver(updateStickyTop);
+    resizeObserver.observe(toolbarElement);
+
     return () => {
       window.removeEventListener('resize', updateStickyTop);
+      resizeObserver.disconnect();
     };
-  }, [hideDoneTasks, selectedRangeId, selectedStartDate]);
+  }, []);
 
 
   useEffect(() => {
@@ -524,7 +528,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
       return a.taskId.localeCompare(b.taskId);
     });
 
-    updateTasks(sorted.map((task, index) => ({ ...task, displayOrder: index + 1 })));
+    replaceTasks(sorted.map((task, index) => ({ ...task, displayOrder: index + 1 })));
   }
 
   return (
@@ -847,6 +851,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
             </div>
           </div>
         </div>
+
 
 
       {contextMenu && (
