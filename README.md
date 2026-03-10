@@ -40,6 +40,17 @@ docker run --rm -it `
   node:24-alpine sh -lc "npm install && npm run build:zip"
 ```
 
+実行ログに `Created: /app/release/taskManage-build.zip` が出れば成功です。
+
+> `set: line 2: illegal option -` が出る場合は、`scripts/create-build-zip.sh` の改行コードがCRLFになっている可能性があります。以下でLFへ変換して再実行してください。
+
+```powershell
+docker run --rm -it `
+  -v "${PWD}:/app" `
+  -w /app `
+  node:24-alpine sh -lc "tr -d '\015' < scripts/create-build-zip.sh > scripts/create-build-zip.sh.lf && mv scripts/create-build-zip.sh.lf scripts/create-build-zip.sh && chmod +x scripts/create-build-zip.sh && npm install && npm run build:zip"
+```
+
 `release/taskManage-build.zip` が生成されます。
 
 ## 配布ZIPの実行（Windows 11 ローカル）
