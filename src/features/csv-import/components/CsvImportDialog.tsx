@@ -157,28 +157,26 @@ export function CsvImportDialog() {
       <input type="file" accept=".csv,text/csv" onChange={handleFileChange} />
 
       {preview && (
-        <div style={{ marginTop: 8 }}>
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
           <button type="button" onClick={handleExportToCvs}>
             CVSへのエクスポート
           </button>
-          <div style={{ marginTop: 8 }}>
-            <button
-              type="button"
-              onClick={handleSave}
-              style={{
-                padding: "10px 18px",
-                fontSize: 16,
-                fontWeight: 700,
-                background: "#16a34a",
-                color: "#fff",
-                border: "1px solid #15803d",
-                borderRadius: 6,
-                cursor: "pointer",
-              }}
-            >
-              Save
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleSave}
+            style={{
+              padding: '12px 28px',
+              fontSize: 18,
+              fontWeight: 700,
+              background: '#16a34a',
+              color: '#fff',
+              border: '1px solid #15803d',
+              borderRadius: 8,
+              cursor: 'pointer',
+            }}
+          >
+            Save
+          </button>
         </div>
       )}
 
