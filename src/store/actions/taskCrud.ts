@@ -28,3 +28,9 @@ export function removeTask(taskId: string) {
   const current = useTaskStore.getState().tasks;
   commitTasks(current.filter((item) => item.taskId !== taskId));
 }
+
+export function removeTasks(taskIds: string[]) {
+  const removeIdSet = new Set(taskIds);
+  const current = useTaskStore.getState().tasks;
+  commitTasks(current.filter((item) => !removeIdSet.has(item.taskId)));
+}
