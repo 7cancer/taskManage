@@ -1,6 +1,8 @@
 import { ChangeEvent, MouseEvent, UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Task, TaskStatus } from '../../../domain/task/types';
-import { addTask, updateTasks } from '../../../store/actions/taskCrud';
+import { TaskFormValues, TaskModal } from '../../task-editor/components/TaskModal';
+import { generateTaskId } from '../../../shared/lib/id';
+import { addTask, removeTasks, replaceTasks, updateTask, updateTasks } from '../../../store/actions/taskCrud';
 import { GanttContextMenu } from './GanttContextMenu';
 import { GanttRowTree } from './GanttRowTree';
 import { createTaskFromRightClick } from '../interactions/rightClickCreate';
@@ -23,6 +25,12 @@ interface DragState {
   startClientX: number;
 }
 
+interface ResizeState {
+  taskId: string;
+  startClientX: number;
+  originalEndDate: string;
+}
+
 interface MonthSpan {
   key: string;
   label: string;
@@ -37,14 +45,14 @@ interface ViewRangeOption {
 }
 
 const BAR_COLORS: Record<TaskStatus, string> = {
-  todo: '#94a3b8',
-  inProgress: '#3b82f6',
-  review: '#f59e0b',
-  done: '#22c55e',
+  todo: '#E97B93',
+  inProgress: '#0794B8',
+  review: '#67B56A',
+  done: '#B8C73D',
 };
 
 const LEFT_COLUMN_WIDTH = 260;
-const DAY_COLUMN_WIDTH = 48;
+const DAY_COLUMN_WIDTH = 28;
 const VIEW_RANGE_OPTIONS: ViewRangeOption[] = [
   { id: '14d', label: '2週間', days: 14 },
   { id: '1m', label: '1ヶ月', days: 31 },
@@ -66,9 +74,9 @@ function getBarHeight(depth: number): number {
 }
 
 function getBarOpacity(depth: number): number {
-  if (depth <= 0) return 0.95;
-  if (depth === 1) return 0.85;
-  return 0.75;
+  if (depth <= 0) return 0.62;
+  if (depth === 1) return 0.52;
+  return 0.42;
 }
 
 function formatLabel(date: Date): string {
@@ -107,8 +115,80 @@ function buildMonthSpans(startDate: Date, totalDays: number): MonthSpan[] {
   return spans;
 }
 
+function isJapaneseHoliday(date: Date): boolean {
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const dayOfWeek = date.getDay();
+
+  const fixedHolidays = new Set([
+    '01-01',
+    '02-11',
+    '02-23',
+    '04-29',
+    '05-03',
+    '05-04',
+    '05-05',
+    '08-11',
+    '11-03',
+    '11-23',
+  ]);
+  const mmdd = `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  if (fixedHolidays.has(mmdd)) return true;
+
+  const weekIndex = Math.floor((day - 1) / 7) + 1;
+  if (month === 1 && dayOfWeek == 1 && weekIndex === 2) return true;
+  if (month === 7 && dayOfWeek == 1 && weekIndex === 3) return true;
+  if (month === 9 && dayOfWeek == 1 && weekIndex === 3) return true;
+  if (month === 10 && dayOfWeek == 1 && weekIndex === 2) return true;
+
+  return false;
+}
+
+function isHolidayCell(date: Date): boolean {
+  const dayOfWeek = date.getDay();
+  if (dayOfWeek === 0 || dayOfWeek === 6) return true;
+  return isJapaneseHoliday(date);
+}
+
+function isTodayCell(date: Date): boolean {
+  return formatLabel(date) === formatLabel(new Date());
+}
+
 function clamp(number: number, min: number, max: number): number {
   return Math.min(Math.max(number, min), max);
+}
+
+function normalizeDateRange(startDate: string, endDate: string): { startDate: string; endDate: string } {
+  if (!startDate || !endDate) {
+    return { startDate, endDate };
+  }
+
+  return startDate <= endDate ? { startDate, endDate } : { startDate: endDate, endDate: startDate };
+}
+
+function buildInitialTaskForm(task?: Task): TaskFormValues {
+  if (task) {
+    return {
+      taskName: task.taskName,
+      status: task.status,
+      startDate: task.startDate,
+      endDate: task.endDate,
+      project: task.project ?? '',
+      category: task.category ?? '',
+      description: task.description ?? '',
+    };
+  }
+
+  const today = formatLabel(new Date());
+  return {
+    taskName: '',
+    status: 'todo',
+    startDate: today,
+    endDate: today,
+    project: '',
+    category: '',
+    description: '',
+  };
 }
 
 function collectDescendantTaskIds(rootTaskId: string, childrenByParentId: Map<string, string[]>): string[] {
@@ -138,9 +218,18 @@ export function GanttChart({ tasks }: GanttChartProps) {
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const [timelineScrollLeft, setTimelineScrollLeft] = useState(0);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(0);
+  const ganttToolbarRef = useRef<HTMLDivElement | null>(null);
+  const [ganttHeaderStickyTop, setGanttHeaderStickyTop] = useState(0);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dragOffsetDays, setDragOffsetDays] = useState(0);
   const dragOffsetDaysRef = useRef(0);
+  const [resizeState, setResizeState] = useState<ResizeState | null>(null);
+  const [resizeOffsetDays, setResizeOffsetDays] = useState(0);
+  const resizeOffsetDaysRef = useRef(0);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [taskForm, setTaskForm] = useState<TaskFormValues>(() => buildInitialTaskForm());
+  const suppressNextBarClickRef = useRef(false);
 
   const selectedOption = VIEW_RANGE_OPTIONS.find((item) => item.id === selectedRangeId) ?? VIEW_RANGE_OPTIONS[1];
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.taskId, task])), [tasks]);
@@ -184,12 +273,24 @@ export function GanttChart({ tasks }: GanttChartProps) {
   }, [childrenByParentId, hideDoneTasks, tasks]);
 
   useEffect(() => {
-    if (!layout) return;
+    const toolbarElement = ganttToolbarRef.current;
+    if (!toolbarElement) return;
 
-    if (!selectedStartDate) {
-      setSelectedStartDate(formatLabel(layout.minStart));
-    }
-  }, [layout, selectedStartDate]);
+    const updateStickyTop = () => {
+      setGanttHeaderStickyTop(Math.ceil(toolbarElement.getBoundingClientRect().height));
+    };
+
+    updateStickyTop();
+    window.addEventListener('resize', updateStickyTop);
+
+    const resizeObserver = new ResizeObserver(updateStickyTop);
+    resizeObserver.observe(toolbarElement);
+
+    return () => {
+      window.removeEventListener('resize', updateStickyTop);
+      resizeObserver.disconnect();
+    };
+  }, []);
 
 
   useEffect(() => {
@@ -227,6 +328,42 @@ export function GanttChart({ tasks }: GanttChartProps) {
     dragOffsetDaysRef.current = 0;
   }
 
+  function handleResizeHandleMouseDown(event: MouseEvent<HTMLDivElement>, task: Task) {
+    event.preventDefault();
+    event.stopPropagation();
+    suppressNextBarClickRef.current = true;
+
+    setResizeState({
+      taskId: task.taskId,
+      startClientX: event.clientX,
+      originalEndDate: task.endDate,
+    });
+    setResizeOffsetDays(0);
+    resizeOffsetDaysRef.current = 0;
+  }
+
+  function openEditModal(task: Task) {
+    if (suppressNextBarClickRef.current) {
+      suppressNextBarClickRef.current = false;
+      return;
+    }
+
+    setTaskForm(buildInitialTaskForm(task));
+    setEditingTaskId(task.taskId);
+    setIsCreateModalOpen(false);
+  }
+
+  function openCreateModal() {
+    setTaskForm(buildInitialTaskForm());
+    setEditingTaskId(null);
+    setIsCreateModalOpen(true);
+  }
+
+  function closeTaskModal() {
+    setEditingTaskId(null);
+    setIsCreateModalOpen(false);
+  }
+
   useEffect(() => {
     if (!dragState) return;
 
@@ -241,6 +378,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
       const finalOffsetDays = dragOffsetDaysRef.current;
 
       if (finalOffsetDays !== 0) {
+        suppressNextBarClickRef.current = true;
         const nextTasks = dragState.affectedTaskIds
           .map((taskId) => taskById.get(taskId))
           .filter((task): task is Task => Boolean(task))
@@ -255,6 +393,10 @@ export function GanttChart({ tasks }: GanttChartProps) {
         }
       }
 
+      setTimeout(() => {
+        suppressNextBarClickRef.current = false;
+      }, 0);
+
       setDragState(null);
       setDragOffsetDays(0);
       dragOffsetDaysRef.current = 0;
@@ -268,6 +410,48 @@ export function GanttChart({ tasks }: GanttChartProps) {
       window.removeEventListener('mouseup', onMouseUp);
     };
   }, [dragState, taskById]);
+
+  useEffect(() => {
+    if (!resizeState) return;
+
+    const onMouseMove = (event: globalThis.MouseEvent) => {
+      const diffX = event.clientX - resizeState.startClientX;
+      const nextOffsetDays = Math.round(diffX / DAY_COLUMN_WIDTH);
+      setResizeOffsetDays(nextOffsetDays);
+      resizeOffsetDaysRef.current = nextOffsetDays;
+    };
+
+    const onMouseUp = () => {
+      const task = taskById.get(resizeState.taskId);
+      if (task) {
+        const shiftedEndDate = shiftTaskDateText(resizeState.originalEndDate, resizeOffsetDaysRef.current);
+        const normalized = normalizeDateRange(task.startDate, shiftedEndDate);
+        if (normalized.endDate !== task.endDate || normalized.startDate !== task.startDate) {
+          updateTask({
+            ...task,
+            startDate: normalized.startDate,
+            endDate: normalized.endDate,
+          });
+        }
+      }
+
+      setTimeout(() => {
+        suppressNextBarClickRef.current = false;
+      }, 0);
+
+      setResizeState(null);
+      setResizeOffsetDays(0);
+      resizeOffsetDaysRef.current = 0;
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [resizeState, taskById]);
 
   if (!layout) {
     return (
@@ -286,6 +470,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
   const timelineWidth = visibleDays * DAY_COLUMN_WIDTH;
   const dayDates = Array.from({ length: visibleDays }, (_, index) => addDays(viewStart, index));
   const monthSpans = buildMonthSpans(viewStart, visibleDays);
+  const monthBoundaryIndexSet = new Set(monthSpans.filter((month) => month.startIndex > 0).map((month) => month.startIndex));
   const visibleRows = currentLayout.rows.filter((row) => !hiddenTaskIdSet.has(row.task.taskId));
 
   function handleRangeChange(event: ChangeEvent<HTMLSelectElement>) {
@@ -330,41 +515,168 @@ export function GanttChart({ tasks }: GanttChartProps) {
     setContextMenu(null);
   }
 
+  function handleTaskFormChange<K extends keyof TaskFormValues>(key: K, value: TaskFormValues[K]) {
+    setTaskForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function handleSaveTask() {
+    if (!taskForm.taskName.trim()) {
+      return;
+    }
+
+    const normalized = normalizeDateRange(taskForm.startDate, taskForm.endDate);
+
+    if (editingTaskId) {
+      const existingTask = taskById.get(editingTaskId);
+      if (!existingTask) return;
+
+      updateTask({
+        ...existingTask,
+        taskName: taskForm.taskName.trim(),
+        status: taskForm.status,
+        startDate: normalized.startDate,
+        endDate: normalized.endDate,
+        project: taskForm.project.trim() || undefined,
+        category: taskForm.category.trim() || undefined,
+        description: taskForm.description.trim() || undefined,
+      });
+    } else {
+      const displayOrder = tasks.reduce((max, task) => Math.max(max, task.displayOrder), 0) + 1;
+      addTask({
+        taskId: generateTaskId(),
+        taskName: taskForm.taskName.trim(),
+        parentTaskId: undefined,
+        status: taskForm.status,
+        startDate: normalized.startDate,
+        endDate: normalized.endDate,
+        assignee: undefined,
+        priority: undefined,
+        project: taskForm.project.trim() || undefined,
+        category: taskForm.category.trim() || undefined,
+        description: taskForm.description.trim() || undefined,
+        displayOrder,
+      });
+    }
+
+    closeTaskModal();
+  }
+
+  function handleDeleteTask() {
+    if (!editingTaskId) return;
+
+    const descendantIds = collectDescendantTaskIds(editingTaskId, childrenByParentId);
+    removeTasks([editingTaskId, ...descendantIds]);
+    closeTaskModal();
+  }
+
+  function handleSortByStartDate() {
+    const sorted = [...tasks].sort((a, b) => {
+      if (a.startDate !== b.startDate) return a.startDate.localeCompare(b.startDate);
+      if (a.endDate !== b.endDate) return a.endDate.localeCompare(b.endDate);
+      return a.taskId.localeCompare(b.taskId);
+    });
+
+    replaceTasks(sorted.map((task, index) => ({ ...task, displayOrder: index + 1 })));
+  }
+
   return (
     <section style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8 }}>
-      <h2 style={{ margin: '0 0 8px' }}>ガントチャート</h2>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            表示開始日:
-            <input type="date" value={selectedStartDate} onChange={handleStartDateChange} />
-          </label>
-          <p style={{ margin: 0, color: '#475569' }}>
-            表示期間: {formatLabel(viewStart)} 〜 {formatLabel(viewEnd)}
-          </p>
+      <div
+        ref={ganttToolbarRef}
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 40,
+          background: '#fff',
+          paddingBottom: 8,
+          borderBottom: '1px solid #e2e8f0',
+          marginBottom: 12,
+        }}
+      >
+        <h2 style={{ margin: '0 0 8px' }}>ガントチャート</h2>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <span style={{ background: BAR_COLORS.todo, opacity: 0.62, color: '#0f172a', fontWeight: 600, padding: '4px 8px', borderRadius: 2, minWidth: 90, textAlign: 'center', boxSizing: 'border-box' }}>未対応</span>
+          <span style={{ background: BAR_COLORS.inProgress, opacity: 0.62, color: '#0f172a', fontWeight: 600, padding: '4px 8px', borderRadius: 2, minWidth: 90, textAlign: 'center', boxSizing: 'border-box' }}>処理中</span>
+          <span style={{ background: BAR_COLORS.review, opacity: 0.62, color: '#0f172a', fontWeight: 600, padding: '4px 8px', borderRadius: 2, minWidth: 90, textAlign: 'center', boxSizing: 'border-box' }}>処理済み</span>
+          <span style={{ background: BAR_COLORS.done, opacity: 0.62, color: '#0f172a', fontWeight: 600, padding: '4px 8px', borderRadius: 2, minWidth: 90, textAlign: 'center', boxSizing: 'border-box' }}>完了</span>
         </div>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            期間:
-            <select value={selectedRangeId} onChange={handleRangeChange}>
-              {VIEW_RANGE_OPTIONS.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <input type="checkbox" checked={hideDoneTasks} onChange={handleHideDoneChange} />
-            完了タスクを非表示
-          </label>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <button type="button" onClick={openCreateModal}>タスク新規登録</button>
+            <button type="button" onClick={handleSortByStartDate}>開始日でソート</button>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              表示開始日:
+              <input type="date" value={selectedStartDate} onChange={handleStartDateChange} />
+            </label>
+            <p style={{ margin: 0, color: '#475569' }}>
+              表示期間: {formatLabel(viewStart)} 〜 {formatLabel(viewEnd)}
+            </p>
+          </div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              期間:
+              <select value={selectedRangeId} onChange={handleRangeChange}>
+                {VIEW_RANGE_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={hideDoneTasks} onChange={handleHideDoneChange} />
+              完了タスクを非表示
+            </label>
+          </div>
         </div>
       </div>
 
       <div style={{ border: '1px solid #e2e8f0', borderRadius: 6 }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)`,
+            position: 'sticky',
+            top: ganttHeaderStickyTop,
+            zIndex: 35,
+            background: '#f8fafc',
+            borderBottom: '1px solid #e2e8f0',
+          }}
+        >
+          <div style={{ padding: '8px 10px', fontWeight: 600, height: GANTT_HEADER_HEIGHT, boxSizing: 'border-box', display: 'flex', alignItems: 'center' }}>
+            タスク
+          </div>
+          <div style={{ height: GANTT_HEADER_HEIGHT, boxSizing: 'border-box', overflow: 'hidden' }}>
+            <div style={{ width: timelineWidth, transform: `translateX(-${timelineScrollLeft}px)` }}>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, background: '#f8fafc' }}>
+                {monthSpans.map((month) => (
+                  <div
+                    key={month.key}
+                    style={{
+                      gridColumn: `${month.startIndex + 1} / span ${month.span}`,
+                      textAlign: 'center',
+                      fontWeight: 600,
+                      padding: '4px 0 2px',
+                      borderLeft: month.startIndex === 0 ? 'none' : '2px solid #94a3b8',
+                    }}
+                  >
+                    {month.label}
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, borderTop: '1px solid #e2e8f0' }}>
+                {dayDates.map((date, index) => (
+                  <div key={index} style={{ textAlign: 'center', padding: '2px 0', borderLeft: index === 0 ? 'none' : `${monthBoundaryIndexSet.has(index) ? 2 : 1}px solid ${monthBoundaryIndexSet.has(index) ? '#94a3b8' : '#e2e8f0'}`, background: isTodayCell(date) ? '#fed7aa' : isHolidayCell(date) ? '#e5e7eb' : '#f8fafc', fontSize: 12 }}>
+                    {date.getDate()}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)` }}>
           <div>
-            <div style={{ padding: '8px 10px', fontWeight: 600, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', height: GANTT_HEADER_HEIGHT, boxSizing: 'border-box', display: 'flex', alignItems: 'center' }}>タスク</div>
             {visibleRows.map(({ task, depth }) => (
               <div
                 key={`${task.taskId}-left`}
@@ -384,37 +696,17 @@ export function GanttChart({ tasks }: GanttChartProps) {
 
           <div ref={timelineScrollRef} onScroll={handleTimelineScroll} style={{ overflowX: 'auto' }}>
             <div style={{ width: timelineWidth }}>
-              <div style={{ borderBottom: '1px solid #e2e8f0', height: GANTT_HEADER_HEIGHT, boxSizing: 'border-box' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, background: '#f8fafc' }}>
-                  {monthSpans.map((month) => (
-                    <div
-                      key={month.key}
-                      style={{
-                        gridColumn: `${month.startIndex + 1} / span ${month.span}`,
-                        textAlign: 'center',
-                        fontWeight: 600,
-                        padding: '4px 0 2px',
-                        borderLeft: '1px solid #e2e8f0',
-                      }}
-                    >
-                      {month.label}
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, borderTop: '1px solid #e2e8f0' }}>
-                  {dayDates.map((date, index) => (
-                    <div key={index} style={{ textAlign: 'center', padding: '2px 0', borderLeft: '1px solid #e2e8f0', fontSize: 12 }}>
-                      {date.getDate()}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {visibleRows.map(({ task, start, end, depth }) => {
+              {visibleRows.map(({ task, start, depth }) => {
                 const currentDragShift = dragShiftByTaskId.get(task.taskId) ?? 0;
                 const isDraggingThisTask = dragState?.affectedTaskIds.includes(task.taskId) ?? false;
+                const isResizingThisTask = resizeState?.taskId === task.taskId;
                 const effectiveStart = currentDragShift !== 0 ? new Date(shiftTaskDateText(task.startDate, currentDragShift)) : start;
-                const effectiveEnd = currentDragShift !== 0 ? new Date(shiftTaskDateText(task.endDate, currentDragShift)) : end;
+                const effectiveEndDateText = isResizingThisTask
+                  ? shiftTaskDateText(task.endDate, resizeOffsetDays)
+                  : currentDragShift !== 0
+                    ? shiftTaskDateText(task.endDate, currentDragShift)
+                    : task.endDate;
+                const effectiveEnd = new Date(effectiveEndDateText);
 
                 const startOffsetDays = getDateOffsetDays(viewStart, effectiveStart);
                 const endOffsetDays = getDateOffsetDays(viewStart, effectiveEnd);
@@ -469,9 +761,23 @@ export function GanttChart({ tasks }: GanttChartProps) {
                       height: GANTT_ROW_HEIGHT,
                       boxSizing: 'border-box',
                       borderTop: '1px solid #f1f5f9',
-                      backgroundImage: `repeating-linear-gradient(to right, #e2e8f0, #e2e8f0 1px, transparent 1px, transparent ${DAY_COLUMN_WIDTH}px)`,
-                    }}
+                                          }}
                   >
+                    {dayDates.map((date, index) => (
+                      <div
+                        key={`${task.taskId}-day-bg-${index}`}
+                        style={{
+                          position: 'absolute',
+                          left: index * DAY_COLUMN_WIDTH,
+                          width: DAY_COLUMN_WIDTH,
+                          top: 0,
+                          bottom: 0,
+                          background: isTodayCell(date) ? '#ffedd5' : isHolidayCell(date) ? '#f3f4f6' : 'transparent',
+                          borderLeft: index === 0 ? 'none' : `${monthBoundaryIndexSet.has(index) ? 2 : 1}px solid ${monthBoundaryIndexSet.has(index) ? '#94a3b8' : '#e2e8f0'}`,
+                          pointerEvents: 'none',
+                        }}
+                      />
+                    ))}
                     {ancestorHighlights.map((highlight, index) => (
                       <div
                         key={`${task.taskId}-ancestor-${index}`}
@@ -501,8 +807,22 @@ export function GanttChart({ tasks }: GanttChartProps) {
                           opacity: getBarOpacity(depth),
                           cursor: isDraggingThisTask ? 'grabbing' : 'grab',
                         }}
+                        onClick={() => openEditModal(task)}
                         onMouseDown={(event) => handleBarMouseDown(event, task)}
-                      />
+                      >
+                        <div
+                          style={{
+                            position: 'absolute',
+                            right: 0,
+                            top: 0,
+                            width: 8,
+                            height: '100%',
+                            background: 'rgba(15, 23, 42, 0.4)',
+                            cursor: 'ew-resize',
+                          }}
+                          onMouseDown={(event) => handleResizeHandleMouseDown(event, task)}
+                        />
+                      </div>
                     )}
                     {(() => {
                       const barStartDay = startOffsetDays;
@@ -600,8 +920,21 @@ export function GanttChart({ tasks }: GanttChartProps) {
         </div>
       </div>
 
+
       {contextMenu && (
         <GanttContextMenu x={contextMenu.x} y={contextMenu.y} onCreateTask={handleCreateTask} onClose={() => setContextMenu(null)} />
+      )}
+
+      {(editingTaskId || isCreateModalOpen) && (
+        <TaskModal
+          mode={editingTaskId ? 'edit' : 'create'}
+          values={taskForm}
+          editingTask={editingTaskId ? taskById.get(editingTaskId) : undefined}
+          onChange={handleTaskFormChange}
+          onSave={handleSaveTask}
+          onDelete={editingTaskId ? handleDeleteTask : undefined}
+          onClose={closeTaskModal}
+        />
       )}
     </section>
   );

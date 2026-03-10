@@ -25,6 +25,8 @@ const CSV_COLUMNS: Array<keyof Task> = [
   'endDate',
   'assignee',
   'priority',
+  'project',
+  'category',
   'description',
   'displayOrder',
 ];
