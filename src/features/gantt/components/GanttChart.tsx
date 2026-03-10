@@ -1,4 +1,4 @@
-import { ChangeEvent, MouseEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, MouseEvent, UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Task, TaskStatus } from '../../../domain/task/types';
 import { addTask } from '../../../store/actions/taskCrud';
 import { GanttContextMenu } from './GanttContextMenu';
@@ -103,6 +103,9 @@ export function GanttChart({ tasks }: GanttChartProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [selectedRangeId, setSelectedRangeId] = useState<string>('1m');
   const [selectedStartDate, setSelectedStartDate] = useState<string>('');
+  const timelineScrollRef = useRef<HTMLDivElement | null>(null);
+  const [timelineScrollLeft, setTimelineScrollLeft] = useState(0);
+  const [timelineViewportWidth, setTimelineViewportWidth] = useState(0);
 
   const selectedOption = VIEW_RANGE_OPTIONS.find((item) => item.id === selectedRangeId) ?? VIEW_RANGE_OPTIONS[1];
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.taskId, task])), [tasks]);
@@ -115,6 +118,29 @@ export function GanttChart({ tasks }: GanttChartProps) {
       setSelectedStartDate(formatLabel(layout.minStart));
     }
   }, [layout, selectedStartDate]);
+
+
+  useEffect(() => {
+    const element = timelineScrollRef.current;
+    if (!element) return;
+
+    const updateViewport = () => {
+      setTimelineViewportWidth(element.clientWidth);
+      setTimelineScrollLeft(element.scrollLeft);
+    };
+
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
+
+    return () => {
+      window.removeEventListener('resize', updateViewport);
+    };
+  }, [layout]);
+
+  function handleTimelineScroll(event: UIEvent<HTMLDivElement>) {
+    setTimelineScrollLeft(event.currentTarget.scrollLeft);
+    setTimelineViewportWidth(event.currentTarget.clientWidth);
+  }
 
   if (!layout) {
     return (
@@ -218,7 +244,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
             ))}
           </div>
 
-          <div style={{ overflowX: 'auto' }}>
+          <div ref={timelineScrollRef} onScroll={handleTimelineScroll} style={{ overflowX: 'auto' }}>
             <div style={{ width: timelineWidth }}>
               <div style={{ borderBottom: '1px solid #e2e8f0', height: GANTT_HEADER_HEIGHT, boxSizing: 'border-box' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, background: '#f8fafc' }}>
@@ -317,20 +343,59 @@ export function GanttChart({ tasks }: GanttChartProps) {
                       />
                     ))}
                     {visibleDurationDays > 0 && (
-                      <div
-                        title={`${task.startDate} - ${task.endDate}`}
-                        style={{
-                          position: 'absolute',
-                          left: visibleStartDay * DAY_COLUMN_WIDTH,
-                          width: visibleDurationDays * DAY_COLUMN_WIDTH,
-                          minWidth: 8,
-                          height: getBarHeight(depth),
-                          top: GANTT_ROW_HEIGHT / 2 - getBarHeight(depth) / 2,
-                          borderRadius: 2,
-                          background: BAR_COLORS[task.status],
-                          opacity: getBarOpacity(depth),
-                        }}
-                      />
+                      <>
+                        <div
+                          title={`${task.startDate} - ${task.endDate}`}
+                          style={{
+                            position: 'absolute',
+                            left: visibleStartDay * DAY_COLUMN_WIDTH,
+                            width: visibleDurationDays * DAY_COLUMN_WIDTH,
+                            minWidth: 8,
+                            height: getBarHeight(depth),
+                            top: GANTT_ROW_HEIGHT / 2 - getBarHeight(depth) / 2,
+                            borderRadius: 2,
+                            background: BAR_COLORS[task.status],
+                            opacity: getBarOpacity(depth),
+                          }}
+                        />
+                        {(() => {
+                          const barLeft = visibleStartDay * DAY_COLUMN_WIDTH;
+                          const barRight = barLeft + visibleDurationDays * DAY_COLUMN_WIDTH;
+                          const viewLeft = timelineScrollLeft;
+                          const viewRight = timelineScrollLeft + timelineViewportWidth;
+
+                          if (barRight <= viewLeft || barLeft >= viewRight) {
+                            return null;
+                          }
+
+                          const labelLeft = Math.max(barLeft + 8, viewLeft + 8);
+                          const labelMaxRight = viewRight - 6;
+                          const labelWidth = labelMaxRight - labelLeft;
+
+                          if (labelWidth <= 12) {
+                            return null;
+                          }
+
+                          return (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                left: labelLeft,
+                                width: labelWidth,
+                                top: GANTT_ROW_HEIGHT / 2 - 8,
+                                fontSize: 12,
+                                lineHeight: '16px',
+                                color: '#0f172a',
+                                whiteSpace: 'nowrap',
+                                pointerEvents: 'none',
+                              }}
+                              title={task.taskName}
+                            >
+                              {task.taskName}
+                            </div>
+                          );
+                        })()}
+                      </>
                     )}
                   </div>
                 );
