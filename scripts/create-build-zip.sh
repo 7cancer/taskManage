@@ -34,12 +34,13 @@ TaskManage ビルド版（Windows 11 ローカル実行想定）
 1. このZIPを任意の場所に解凍
 2. PowerShellで解凍先フォルダへ移動
 3. `./run-local.cmd` を実行
-4. ブラウザで http://localhost:4173 を開く
+4. 既定ブラウザが自動で開きます（開かない場合は http://localhost:4173 を手動で開く）
 README
 
 cat > "$STAGING_DIR/run-local.cmd" <<'CMD'
 @echo off
 cd /d "%~dp0"
+start "" "http://localhost:4173"
 python -m http.server 4173
 CMD
 

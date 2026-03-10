@@ -63,7 +63,7 @@ docker run --rm -it `
 ./run-local.cmd
 ```
 
-4. ブラウザで `http://localhost:4173` を開く
+4. 既定ブラウザが自動で開きます（開かない場合は `http://localhost:4173` を手動で開く）
 
 ## 現在の状態
 
