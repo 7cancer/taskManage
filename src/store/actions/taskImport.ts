@@ -81,6 +81,8 @@ export function importTasksFromCsvText(csvText: string): TaskImportResult {
       endDate: cols[headerIndexMap.get('endDate') ?? -1] ?? '',
       assignee: cols[headerIndexMap.get('assignee') ?? -1] || undefined,
       priority: toTaskPriority(cols[headerIndexMap.get('priority') ?? -1] ?? ''),
+      project: cols[headerIndexMap.get('project') ?? -1] || undefined,
+      category: cols[headerIndexMap.get('category') ?? -1] || undefined,
       description: cols[headerIndexMap.get('description') ?? -1] || undefined,
       displayOrder,
     };

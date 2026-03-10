@@ -173,6 +173,8 @@ function buildInitialTaskForm(task?: Task): TaskFormValues {
       status: task.status,
       startDate: task.startDate,
       endDate: task.endDate,
+      project: task.project ?? '',
+      category: task.category ?? '',
       description: task.description ?? '',
     };
   }
@@ -183,6 +185,8 @@ function buildInitialTaskForm(task?: Task): TaskFormValues {
     status: 'todo',
     startDate: today,
     endDate: today,
+    project: '',
+    category: '',
     description: '',
   };
 }
@@ -532,6 +536,8 @@ export function GanttChart({ tasks }: GanttChartProps) {
         status: taskForm.status,
         startDate: normalized.startDate,
         endDate: normalized.endDate,
+        project: taskForm.project.trim() || undefined,
+        category: taskForm.category.trim() || undefined,
         description: taskForm.description.trim() || undefined,
       });
     } else {
@@ -545,6 +551,8 @@ export function GanttChart({ tasks }: GanttChartProps) {
         endDate: normalized.endDate,
         assignee: undefined,
         priority: undefined,
+        project: taskForm.project.trim() || undefined,
+        category: taskForm.category.trim() || undefined,
         description: taskForm.description.trim() || undefined,
         displayOrder,
       });
@@ -911,6 +919,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
             </div>
           </div>
         </div>
+
 
 
 

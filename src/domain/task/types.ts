@@ -11,6 +11,8 @@ export interface Task {
   endDate: string;
   assignee?: string;
   priority?: TaskPriority;
+  project?: string;
+  category?: string;
   description?: string;
   displayOrder: number;
 }

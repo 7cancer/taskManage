@@ -54,6 +54,8 @@ function createDummyProjectTasks(): Task[] {
       status: 'todo',
       startDate: toDateText(addDays(base, 0)),
       endDate: toDateText(addDays(base, 2)),
+      project: '新規プロジェクトA',
+      category: '計画',
       displayOrder: 1,
     },
     {
@@ -63,6 +65,8 @@ function createDummyProjectTasks(): Task[] {
       status: 'inProgress',
       startDate: toDateText(addDays(base, 3)),
       endDate: toDateText(addDays(base, 7)),
+      project: '新規プロジェクトA',
+      category: '要件',
       displayOrder: 2,
     },
     {
@@ -71,6 +75,8 @@ function createDummyProjectTasks(): Task[] {
       status: 'review',
       startDate: toDateText(addDays(base, 8)),
       endDate: toDateText(addDays(base, 12)),
+      project: '新規プロジェクトA',
+      category: '設計',
       displayOrder: 3,
     },
     {
@@ -79,6 +85,8 @@ function createDummyProjectTasks(): Task[] {
       status: 'todo',
       startDate: toDateText(addDays(base, 13)),
       endDate: toDateText(addDays(base, 20)),
+      project: '新規プロジェクトA',
+      category: '実装',
       displayOrder: 4,
     },
     {
@@ -87,6 +95,8 @@ function createDummyProjectTasks(): Task[] {
       status: 'done',
       startDate: toDateText(addDays(base, 21)),
       endDate: toDateText(addDays(base, 22)),
+      project: '新規プロジェクトA',
+      category: 'リリース',
       displayOrder: 5,
     },
   ];
@@ -142,7 +152,7 @@ export function MainRoute() {
                 <ul style={{ marginTop: 0 }}>
                   {groupedTasks[status].map((task) => (
                     <li key={task.taskId}>
-                      [{task.displayOrder}] {task.taskId} | {task.taskName} | {task.startDate} - {task.endDate}
+                      [{task.displayOrder}] {task.taskId} | {task.taskName} | {task.startDate} - {task.endDate} | PJ:{task.project ?? '-'} | Cat:{task.category ?? '-'}
                     </li>
                   ))}
                 </ul>

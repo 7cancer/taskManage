@@ -9,6 +9,8 @@ export interface TaskFormValues {
   status: TaskStatus;
   startDate: string;
   endDate: string;
+  project: string;
+  category: string;
   description: string;
 }
 
@@ -70,6 +72,14 @@ export function TaskModal({ mode, values, editingTask, onChange, onSave, onClose
               <label>
                 終了日
                 <input type="date" style={{ width: '100%' }} value={values.endDate} onChange={handleChange('endDate')} />
+              </label>
+              <label>
+                プロジェクト
+                <input style={{ width: '100%' }} value={values.project} onChange={handleChange('project')} />
+              </label>
+              <label>
+                カテゴリ
+                <input style={{ width: '100%' }} value={values.category} onChange={handleChange('category')} />
               </label>
               <label>
                 説明
