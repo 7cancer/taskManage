@@ -915,10 +915,14 @@ export function GanttChart({ tasks }: GanttChartProps) {
                   </div>
                 );
               })}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+
+
+
+
 
 
       {contextMenu && (
