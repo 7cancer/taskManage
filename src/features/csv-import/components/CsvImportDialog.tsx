@@ -43,6 +43,7 @@ function triggerCsvDownload(csvText: string, fileName: string) {
 
 export function CsvImportDialog() {
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [saveMessage, setSaveMessage] = useState<string>('');
   const [preview, setPreview] = useState<CsvPreviewState | null>(null);
   const setTasks = useTaskStore((state) => state.setTasks);
   const tasks = useTaskStore((state) => state.tasks);
@@ -59,6 +60,7 @@ export function CsvImportDialog() {
 
     try {
       setErrorMessage('');
+      setSaveMessage('');
 
       const text = await file.text();
       const lines = text
@@ -130,17 +132,45 @@ export function CsvImportDialog() {
     }
   }
 
+
+  async function handleSave() {
+    if (!preview) return;
+
+    try {
+      setErrorMessage('');
+      setSaveMessage('');
+      const saved = await persistTasksToCsvFile(tasks);
+      if (!saved) {
+        setErrorMessage('先に「CVSへのエクスポート」で保存先CSVファイルを選択してください。');
+        return;
+      }
+
+      setSaveMessage('CSVファイルへ保存しました。');
+    } catch (error) {
+      setErrorMessage(`Saveに失敗しました: ${(error as Error).message}`);
+    }
+  }
+
   return (
     <section style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8 }}>
       <h2 style={{ marginTop: 0 }}>CSV取込（最小実装）</h2>
       <input type="file" accept=".csv,text/csv" onChange={handleFileChange} />
 
       {preview && (
-        <div style={{ marginTop: 8 }}>
+        <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
           <button type="button" onClick={handleExportToCvs}>
             CVSへのエクスポート
           </button>
+          <button type="button" onClick={handleSave}>
+            Save
+          </button>
         </div>
+      )}
+
+      {saveMessage && (
+        <p style={{ color: '#166534', marginTop: 8 }} role="status">
+          {saveMessage}
+        </p>
       )}
 
       {errorMessage && (
