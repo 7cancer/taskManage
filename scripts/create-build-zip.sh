@@ -34,14 +34,57 @@ TaskManage ビルド版（Windows 11 ローカル実行想定）
 1. このZIPを任意の場所に解凍
 2. PowerShellで解凍先フォルダへ移動
 3. `./run-local.cmd` を実行
-4. 既定ブラウザが自動で開きます（開かない場合は http://localhost:4173 を手動で開く）
+4. ブラウザで http://localhost:4173 を開く
+
+■ トラブルシュート
+- `localhost で接続が拒否されました` と表示される場合:
+  - サーバー起動直後の可能性があります。数秒待って再読み込みしてください。
+- `Python was not found; run without arguments to install from the Microsoft Store ...` と表示される場合:
+  - Windows の App execution aliases が反応している可能性があります。
+  - `py -V` が使えるか確認し、使えない場合は Python 3 をインストールしてください。
 README
 
 cat > "$STAGING_DIR/run-local.cmd" <<'CMD'
 @echo off
+setlocal
 cd /d "%~dp0"
-start "" "http://localhost:4173"
-python -m http.server 4173
+set "PORT=4173"
+
+set "PYTHON_CMD="
+
+where py >nul 2>&1
+if %errorlevel%==0 (
+  py -3 -c "import sys" >nul 2>&1
+  if %errorlevel%==0 (
+    set "PYTHON_CMD=py -3"
+  )
+)
+
+if not defined PYTHON_CMD (
+  where python >nul 2>&1
+  if %errorlevel%==0 (
+    python -c "import sys" >nul 2>&1
+    if %errorlevel%==0 (
+      set "PYTHON_CMD=python"
+    )
+  )
+)
+
+if not defined PYTHON_CMD (
+  echo [ERROR] A usable Python 3 runtime was not found.
+  echo.
+  echo If you see "Python was not found; run without arguments to install from the Microsoft Store...",
+  echo disable the Python alias in:
+  echo   Settings ^> Apps ^> Advanced app settings ^> App execution aliases
+  echo then install Python 3 from https://www.python.org/downloads/windows/
+  echo.
+  pause
+  exit /b 1
+)
+
+echo Starting local server at http://localhost:%PORT% ...
+start "" powershell -NoProfile -Command "Start-Sleep -Seconds 2; Start-Process 'http://localhost:%PORT%'"
+%PYTHON_CMD% -m http.server %PORT%
 CMD
 
 rm -f "$ZIP_PATH"
