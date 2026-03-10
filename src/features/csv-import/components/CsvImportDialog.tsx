@@ -1,6 +1,6 @@
 import { ChangeEvent, useMemo, useState } from 'react';
 import { importTasksFromCsvText } from '../../../store/actions/taskImport';
-import { serializeTasksToCsv } from '../../../store/actions/taskPersistence';
+import { CsvFileHandle, persistTasksToCsvFile, serializeTasksToCsv, setCsvExportFileHandle } from '../../../store/actions/taskPersistence';
 import { useTaskStore } from '../../../store/taskStore';
 
 interface CsvPreviewState {
@@ -17,12 +17,7 @@ interface SaveFilePickerWindow extends Window {
   showSaveFilePicker?: (options?: {
     suggestedName?: string;
     types?: Array<{ description: string; accept: Record<string, string[]> }>;
-  }) => Promise<{
-    createWritable: () => Promise<{
-      write: (data: Blob | string) => Promise<void>;
-      close: () => Promise<void>;
-    }>;
-  }>;
+  }) => Promise<CsvFileHandle>;
 }
 
 function parseCsvLine(line: string): string[] {
@@ -109,16 +104,17 @@ export function CsvImportDialog() {
     }
   }
 
-  async function handleApplyUpdatesToCsv() {
+  async function handleExportToCvs() {
     if (!preview) return;
 
-    const csvText = serializeTasksToCsv(tasks);
     const targetFileName = ensureCsvExtension(preview.fileName);
+    const pickerWindow = window as SaveFilePickerWindow;
 
     try {
-      const pickerWindow = window as SaveFilePickerWindow;
+      setErrorMessage('');
+
       if (!pickerWindow.showSaveFilePicker) {
-        triggerCsvDownload(csvText, targetFileName);
+        triggerCsvDownload(serializeTasksToCsv(tasks), targetFileName);
         return;
       }
 
@@ -126,11 +122,11 @@ export function CsvImportDialog() {
         suggestedName: targetFileName,
         types: [{ description: 'CSV file', accept: { 'text/csv': ['.csv'] } }],
       });
-      const writable = await fileHandle.createWritable();
-      await writable.write(csvText);
-      await writable.close();
+
+      setCsvExportFileHandle(fileHandle);
+      await persistTasksToCsvFile(tasks);
     } catch (error) {
-      setErrorMessage(`CSV更新の保存に失敗しました: ${(error as Error).message}`);
+      setErrorMessage(`CVSエクスポートに失敗しました: ${(error as Error).message}`);
     }
   }
 
@@ -141,8 +137,8 @@ export function CsvImportDialog() {
 
       {preview && (
         <div style={{ marginTop: 8 }}>
-          <button type="button" onClick={handleApplyUpdatesToCsv}>
-            更新内容をCSVへ反映して保存
+          <button type="button" onClick={handleExportToCvs}>
+            CVSへのエクスポート
           </button>
         </div>
       )}
