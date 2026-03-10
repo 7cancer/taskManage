@@ -52,7 +52,7 @@ const BAR_COLORS: Record<TaskStatus, string> = {
 };
 
 const LEFT_COLUMN_WIDTH = 260;
-const DAY_COLUMN_WIDTH = 48;
+const DAY_COLUMN_WIDTH = 44;
 const VIEW_RANGE_OPTIONS: ViewRangeOption[] = [
   { id: '14d', label: '2週間', days: 14 },
   { id: '1m', label: '1ヶ月', days: 31 },
@@ -113,6 +113,41 @@ function buildMonthSpans(startDate: Date, totalDays: number): MonthSpan[] {
   }
 
   return spans;
+}
+
+function isJapaneseHoliday(date: Date): boolean {
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const dayOfWeek = date.getDay();
+
+  const fixedHolidays = new Set([
+    '01-01',
+    '02-11',
+    '02-23',
+    '04-29',
+    '05-03',
+    '05-04',
+    '05-05',
+    '08-11',
+    '11-03',
+    '11-23',
+  ]);
+  const mmdd = `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  if (fixedHolidays.has(mmdd)) return true;
+
+  const weekIndex = Math.floor((day - 1) / 7) + 1;
+  if (month === 1 && dayOfWeek == 1 && weekIndex === 2) return true;
+  if (month === 7 && dayOfWeek == 1 && weekIndex === 3) return true;
+  if (month === 9 && dayOfWeek == 1 && weekIndex === 3) return true;
+  if (month === 10 && dayOfWeek == 1 && weekIndex === 2) return true;
+
+  return false;
+}
+
+function isHolidayCell(date: Date): boolean {
+  const dayOfWeek = date.getDay();
+  if (dayOfWeek === 0 || dayOfWeek === 6) return true;
+  return isJapaneseHoliday(date);
 }
 
 function clamp(number: number, min: number, max: number): number {
@@ -427,6 +462,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
   const timelineWidth = visibleDays * DAY_COLUMN_WIDTH;
   const dayDates = Array.from({ length: visibleDays }, (_, index) => addDays(viewStart, index));
   const monthSpans = buildMonthSpans(viewStart, visibleDays);
+  const monthBoundaryIndexSet = new Set(monthSpans.filter((month) => month.startIndex > 0).map((month) => month.startIndex));
   const visibleRows = currentLayout.rows.filter((row) => !hiddenTaskIdSet.has(row.task.taskId));
 
   function handleRangeChange(event: ChangeEvent<HTMLSelectElement>) {
@@ -603,7 +639,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
                       textAlign: 'center',
                       fontWeight: 600,
                       padding: '4px 0 2px',
-                      borderLeft: '1px solid #e2e8f0',
+                      borderLeft: month.startIndex === 0 ? 'none' : '2px solid #94a3b8',
                     }}
                   >
                     {month.label}
@@ -612,7 +648,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, borderTop: '1px solid #e2e8f0' }}>
                 {dayDates.map((date, index) => (
-                  <div key={index} style={{ textAlign: 'center', padding: '2px 0', borderLeft: '1px solid #e2e8f0', fontSize: 12 }}>
+                  <div key={index} style={{ textAlign: 'center', padding: '2px 0', borderLeft: index === 0 ? 'none' : `${monthBoundaryIndexSet.has(index) ? 2 : 1}px solid ${monthBoundaryIndexSet.has(index) ? '#94a3b8' : '#e2e8f0'}`, background: isHolidayCell(date) ? '#e5e7eb' : '#f8fafc', fontSize: 12 }}>
                     {date.getDate()}
                   </div>
                 ))}
@@ -707,9 +743,23 @@ export function GanttChart({ tasks }: GanttChartProps) {
                       height: GANTT_ROW_HEIGHT,
                       boxSizing: 'border-box',
                       borderTop: '1px solid #f1f5f9',
-                      backgroundImage: `repeating-linear-gradient(to right, #e2e8f0, #e2e8f0 1px, transparent 1px, transparent ${DAY_COLUMN_WIDTH}px)`,
-                    }}
+                                          }}
                   >
+                    {dayDates.map((date, index) => (
+                      <div
+                        key={`${task.taskId}-day-bg-${index}`}
+                        style={{
+                          position: 'absolute',
+                          left: index * DAY_COLUMN_WIDTH,
+                          width: DAY_COLUMN_WIDTH,
+                          top: 0,
+                          bottom: 0,
+                          background: isHolidayCell(date) ? '#f3f4f6' : 'transparent',
+                          borderLeft: index === 0 ? 'none' : `${monthBoundaryIndexSet.has(index) ? 2 : 1}px solid ${monthBoundaryIndexSet.has(index) ? '#94a3b8' : '#e2e8f0'}`,
+                          pointerEvents: 'none',
+                        }}
+                      />
+                    ))}
                     {ancestorHighlights.map((highlight, index) => (
                       <div
                         key={`${task.taskId}-ancestor-${index}`}
@@ -851,6 +901,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
             </div>
           </div>
         </div>
+
 
 
 
