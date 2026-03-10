@@ -343,60 +343,109 @@ export function GanttChart({ tasks }: GanttChartProps) {
                       />
                     ))}
                     {visibleDurationDays > 0 && (
-                      <>
+                      <div
+                        title={`${task.startDate} - ${task.endDate}`}
+                        style={{
+                          position: 'absolute',
+                          left: visibleStartDay * DAY_COLUMN_WIDTH,
+                          width: visibleDurationDays * DAY_COLUMN_WIDTH,
+                          minWidth: 8,
+                          height: getBarHeight(depth),
+                          top: GANTT_ROW_HEIGHT / 2 - getBarHeight(depth) / 2,
+                          borderRadius: 2,
+                          background: BAR_COLORS[task.status],
+                          opacity: getBarOpacity(depth),
+                        }}
+                      />
+                    )}
+                    {(() => {
+                      const barStartDay = startOffsetDays;
+                      const barEndDayExclusive = endOffsetDays + 1;
+                      const barLeft = barStartDay * DAY_COLUMN_WIDTH;
+                      const barRight = barEndDayExclusive * DAY_COLUMN_WIDTH;
+                      const viewLeft = timelineScrollLeft;
+                      const viewRight = timelineScrollLeft + timelineViewportWidth;
+
+                      const edgePadding = 8;
+                      const top = GANTT_ROW_HEIGHT / 2 - 8;
+
+                      if (barRight <= viewLeft) {
+                        const labelLeft = viewLeft + edgePadding;
+                        const labelWidth = Math.max(timelineViewportWidth - edgePadding * 2, 20);
+
+                        return (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              left: labelLeft,
+                              width: labelWidth,
+                              top,
+                              fontSize: 12,
+                              lineHeight: '16px',
+                              color: '#0f172a',
+                              whiteSpace: 'nowrap',
+                              pointerEvents: 'none',
+                            }}
+                            title={task.taskName}
+                          >
+                            {task.taskName}
+                          </div>
+                        );
+                      }
+
+                      if (barLeft >= viewRight) {
+                        const labelWidth = Math.max(timelineViewportWidth - edgePadding * 2, 20);
+                        const labelLeft = Math.max(viewRight - labelWidth - edgePadding, viewLeft + edgePadding);
+
+                        return (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              left: labelLeft,
+                              width: labelWidth,
+                              top,
+                              fontSize: 12,
+                              lineHeight: '16px',
+                              color: '#0f172a',
+                              whiteSpace: 'nowrap',
+                              textAlign: 'right',
+                              pointerEvents: 'none',
+                            }}
+                            title={task.taskName}
+                          >
+                            {task.taskName}
+                          </div>
+                        );
+                      }
+
+                      const visibleBarLeft = Math.max(barLeft, viewLeft);
+                      const labelLeft = Math.max(visibleBarLeft + edgePadding, viewLeft + edgePadding);
+                      const labelMaxRight = viewRight - 6;
+                      const labelWidth = labelMaxRight - labelLeft;
+
+                      if (labelWidth <= 12) {
+                        return null;
+                      }
+
+                      return (
                         <div
-                          title={`${task.startDate} - ${task.endDate}`}
                           style={{
                             position: 'absolute',
-                            left: visibleStartDay * DAY_COLUMN_WIDTH,
-                            width: visibleDurationDays * DAY_COLUMN_WIDTH,
-                            minWidth: 8,
-                            height: getBarHeight(depth),
-                            top: GANTT_ROW_HEIGHT / 2 - getBarHeight(depth) / 2,
-                            borderRadius: 2,
-                            background: BAR_COLORS[task.status],
-                            opacity: getBarOpacity(depth),
+                            left: labelLeft,
+                            width: labelWidth,
+                            top,
+                            fontSize: 12,
+                            lineHeight: '16px',
+                            color: '#0f172a',
+                            whiteSpace: 'nowrap',
+                            pointerEvents: 'none',
                           }}
-                        />
-                        {(() => {
-                          const barLeft = visibleStartDay * DAY_COLUMN_WIDTH;
-                          const barRight = barLeft + visibleDurationDays * DAY_COLUMN_WIDTH;
-                          const viewLeft = timelineScrollLeft;
-                          const viewRight = timelineScrollLeft + timelineViewportWidth;
-
-                          if (barRight <= viewLeft || barLeft >= viewRight) {
-                            return null;
-                          }
-
-                          const labelLeft = Math.max(barLeft + 8, viewLeft + 8);
-                          const labelMaxRight = viewRight - 6;
-                          const labelWidth = labelMaxRight - labelLeft;
-
-                          if (labelWidth <= 12) {
-                            return null;
-                          }
-
-                          return (
-                            <div
-                              style={{
-                                position: 'absolute',
-                                left: labelLeft,
-                                width: labelWidth,
-                                top: GANTT_ROW_HEIGHT / 2 - 8,
-                                fontSize: 12,
-                                lineHeight: '16px',
-                                color: '#0f172a',
-                                whiteSpace: 'nowrap',
-                                pointerEvents: 'none',
-                              }}
-                              title={task.taskName}
-                            >
-                              {task.taskName}
-                            </div>
-                          );
-                        })()}
-                      </>
-                    )}
+                          title={task.taskName}
+                        >
+                          {task.taskName}
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}
