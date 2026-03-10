@@ -118,7 +118,6 @@ function buildMonthSpans(startDate: Date, totalDays: number): MonthSpan[] {
 function isJapaneseHoliday(date: Date): boolean {
   const month = date.getMonth() + 1;
   const day = date.getDate();
-  const dayOfWeek = date.getDay();
 
   const fixedHolidays = new Set([
     '01-01',
@@ -133,15 +132,8 @@ function isJapaneseHoliday(date: Date): boolean {
     '11-23',
   ]);
   const mmdd = `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  if (fixedHolidays.has(mmdd)) return true;
 
-  const weekIndex = Math.floor((day - 1) / 7) + 1;
-  if (month === 1 && dayOfWeek == 1 && weekIndex === 2) return true;
-  if (month === 7 && dayOfWeek == 1 && weekIndex === 3) return true;
-  if (month === 9 && dayOfWeek == 1 && weekIndex === 3) return true;
-  if (month === 10 && dayOfWeek == 1 && weekIndex === 2) return true;
-
-  return false;
+  return fixedHolidays.has(mmdd);
 }
 
 function isHolidayCell(date: Date): boolean {
@@ -150,8 +142,24 @@ function isHolidayCell(date: Date): boolean {
   return isJapaneseHoliday(date);
 }
 
+function getJstDateLabel(baseDate = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(baseDate);
+}
+
+function shiftDateLabel(dateLabel: string, offsetDays: number): string {
+  const date = new Date(`${dateLabel}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return dateLabel;
+  date.setDate(date.getDate() + offsetDays);
+  return formatLabel(date);
+}
+
 function isTodayCell(date: Date): boolean {
-  return formatLabel(date) === formatLabel(new Date());
+  return formatLabel(date) === getJstDateLabel();
 }
 
 function clamp(number: number, min: number, max: number): number {
@@ -182,7 +190,7 @@ function buildInitialTaskForm(task?: Task): TaskFormValues {
   const today = formatLabel(new Date());
   return {
     taskName: '',
-    status: 'todo',
+    status: '',
     startDate: today,
     endDate: today,
     project: '',
@@ -271,6 +279,13 @@ export function GanttChart({ tasks }: GanttChartProps) {
 
     return hiddenTaskIds;
   }, [childrenByParentId, hideDoneTasks, tasks]);
+
+  useEffect(() => {
+    if (!layout) return;
+    if (!selectedStartDate) {
+      setSelectedStartDate(shiftDateLabel(getJstDateLabel(), -5));
+    }
+  }, [layout, selectedStartDate]);
 
   useEffect(() => {
     const toolbarElement = ganttToolbarRef.current;
@@ -520,7 +535,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
   }
 
   function handleSaveTask() {
-    if (!taskForm.taskName.trim()) {
+    if (!taskForm.taskName.trim() || taskForm.status === '') {
       return;
     }
 
@@ -533,7 +548,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
       updateTask({
         ...existingTask,
         taskName: taskForm.taskName.trim(),
-        status: taskForm.status,
+        status: taskForm.status as TaskStatus,
         startDate: normalized.startDate,
         endDate: normalized.endDate,
         project: taskForm.project.trim() || undefined,
@@ -546,7 +561,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
         taskId: generateTaskId(),
         taskName: taskForm.taskName.trim(),
         parentTaskId: undefined,
-        status: taskForm.status,
+        status: taskForm.status as TaskStatus,
         startDate: normalized.startDate,
         endDate: normalized.endDate,
         assignee: undefined,
@@ -919,6 +934,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
             </div>
           </div>
         </div>
+
 
 
 
