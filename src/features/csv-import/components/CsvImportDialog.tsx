@@ -1,5 +1,6 @@
 import { ChangeEvent, useMemo, useState } from 'react';
 import { importTasksFromCsvText } from '../../../store/actions/taskImport';
+import { serializeTasksToCsv } from '../../../store/actions/taskPersistence';
 import { useTaskStore } from '../../../store/taskStore';
 
 interface CsvPreviewState {
@@ -12,15 +13,44 @@ interface CsvPreviewState {
   errorCount: number;
 }
 
+interface SaveFilePickerWindow extends Window {
+  showSaveFilePicker?: (options?: {
+    suggestedName?: string;
+    types?: Array<{ description: string; accept: Record<string, string[]> }>;
+  }) => Promise<{
+    createWritable: () => Promise<{
+      write: (data: Blob | string) => Promise<void>;
+      close: () => Promise<void>;
+    }>;
+  }>;
+}
+
 function parseCsvLine(line: string): string[] {
   // NOTE: 最小実装のためカンマ分割のみ（クォート対応は後続タスクで実装）
   return line.split(',').map((value) => value.trim());
+}
+
+function ensureCsvExtension(fileName: string): string {
+  return fileName.toLowerCase().endsWith('.csv') ? fileName : `${fileName}.csv`;
+}
+
+function triggerCsvDownload(csvText: string, fileName: string) {
+  const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = ensureCsvExtension(fileName);
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
 }
 
 export function CsvImportDialog() {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [preview, setPreview] = useState<CsvPreviewState | null>(null);
   const setTasks = useTaskStore((state) => state.setTasks);
+  const tasks = useTaskStore((state) => state.tasks);
 
   const summaryText = useMemo(() => {
     if (!preview) return '';
@@ -79,10 +109,43 @@ export function CsvImportDialog() {
     }
   }
 
+  async function handleApplyUpdatesToCsv() {
+    if (!preview) return;
+
+    const csvText = serializeTasksToCsv(tasks);
+    const targetFileName = ensureCsvExtension(preview.fileName);
+
+    try {
+      const pickerWindow = window as SaveFilePickerWindow;
+      if (!pickerWindow.showSaveFilePicker) {
+        triggerCsvDownload(csvText, targetFileName);
+        return;
+      }
+
+      const fileHandle = await pickerWindow.showSaveFilePicker({
+        suggestedName: targetFileName,
+        types: [{ description: 'CSV file', accept: { 'text/csv': ['.csv'] } }],
+      });
+      const writable = await fileHandle.createWritable();
+      await writable.write(csvText);
+      await writable.close();
+    } catch (error) {
+      setErrorMessage(`CSV更新の保存に失敗しました: ${(error as Error).message}`);
+    }
+  }
+
   return (
     <section style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8 }}>
       <h2 style={{ marginTop: 0 }}>CSV取込（最小実装）</h2>
       <input type="file" accept=".csv,text/csv" onChange={handleFileChange} />
+
+      {preview && (
+        <div style={{ marginTop: 8 }}>
+          <button type="button" onClick={handleApplyUpdatesToCsv}>
+            更新内容をCSVへ反映して保存
+          </button>
+        </div>
+      )}
 
       {errorMessage && (
         <p style={{ color: '#b91c1c', marginTop: 8 }} role="alert">
