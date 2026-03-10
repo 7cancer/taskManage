@@ -1,5 +1,6 @@
 import { ChangeEvent, useMemo, useState } from 'react';
 import { importTasksFromCsvText } from '../../../store/actions/taskImport';
+import { CsvFileHandle, persistTasksToCsvFile, serializeTasksToCsv, setCsvExportFileHandle } from '../../../store/actions/taskPersistence';
 import { useTaskStore } from '../../../store/taskStore';
 
 interface CsvPreviewState {
@@ -12,15 +13,40 @@ interface CsvPreviewState {
   errorCount: number;
 }
 
+interface SaveFilePickerWindow extends Window {
+  showSaveFilePicker?: (options?: {
+    suggestedName?: string;
+    types?: Array<{ description: string; accept: Record<string, string[]> }>;
+  }) => Promise<CsvFileHandle>;
+}
+
 function parseCsvLine(line: string): string[] {
   // NOTE: 最小実装のためカンマ分割のみ（クォート対応は後続タスクで実装）
   return line.split(',').map((value) => value.trim());
 }
 
+function ensureCsvExtension(fileName: string): string {
+  return fileName.toLowerCase().endsWith('.csv') ? fileName : `${fileName}.csv`;
+}
+
+function triggerCsvDownload(csvText: string, fileName: string) {
+  const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = ensureCsvExtension(fileName);
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
 export function CsvImportDialog() {
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [saveMessage, setSaveMessage] = useState<string>('');
   const [preview, setPreview] = useState<CsvPreviewState | null>(null);
   const setTasks = useTaskStore((state) => state.setTasks);
+  const tasks = useTaskStore((state) => state.tasks);
 
   const summaryText = useMemo(() => {
     if (!preview) return '';
@@ -34,6 +60,7 @@ export function CsvImportDialog() {
 
     try {
       setErrorMessage('');
+      setSaveMessage('');
 
       const text = await file.text();
       const lines = text
@@ -79,10 +106,87 @@ export function CsvImportDialog() {
     }
   }
 
+  async function handleExportToCvs() {
+    if (!preview) return;
+
+    const targetFileName = ensureCsvExtension(preview.fileName);
+    const pickerWindow = window as SaveFilePickerWindow;
+
+    try {
+      setErrorMessage('');
+
+      if (!pickerWindow.showSaveFilePicker) {
+        triggerCsvDownload(serializeTasksToCsv(tasks), targetFileName);
+        return;
+      }
+
+      const fileHandle = await pickerWindow.showSaveFilePicker({
+        suggestedName: targetFileName,
+        types: [{ description: 'CSV file', accept: { 'text/csv': ['.csv'] } }],
+      });
+
+      setCsvExportFileHandle(fileHandle);
+      await persistTasksToCsvFile(tasks);
+    } catch (error) {
+      setErrorMessage(`CVSエクスポートに失敗しました: ${(error as Error).message}`);
+    }
+  }
+
+
+  async function handleSave() {
+    if (!preview) return;
+
+    try {
+      setErrorMessage('');
+      setSaveMessage('');
+      const saved = await persistTasksToCsvFile(tasks);
+      if (!saved) {
+        setErrorMessage('先に「CVSへのエクスポート」で保存先CSVファイルを選択してください。');
+        return;
+      }
+
+      setSaveMessage('CSVファイルへ保存しました。');
+    } catch (error) {
+      setErrorMessage(`Saveに失敗しました: ${(error as Error).message}`);
+    }
+  }
+
   return (
     <section style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8 }}>
       <h2 style={{ marginTop: 0 }}>CSV取込（最小実装）</h2>
       <input type="file" accept=".csv,text/csv" onChange={handleFileChange} />
+
+      {preview && (
+        <div style={{ marginTop: 8 }}>
+          <button type="button" onClick={handleExportToCvs}>
+            CVSへのエクスポート
+          </button>
+          <div style={{ marginTop: 8 }}>
+            <button
+              type="button"
+              onClick={handleSave}
+              style={{
+                padding: "10px 18px",
+                fontSize: 16,
+                fontWeight: 700,
+                background: "#16a34a",
+                color: "#fff",
+                border: "1px solid #15803d",
+                borderRadius: 6,
+                cursor: "pointer",
+              }}
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      )}
+
+      {saveMessage && (
+        <p style={{ color: '#166534', marginTop: 8 }} role="status">
+          {saveMessage}
+        </p>
+      )}
 
       {errorMessage && (
         <p style={{ color: '#b91c1c', marginTop: 8 }} role="alert">
