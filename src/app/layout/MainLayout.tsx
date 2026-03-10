@@ -6,10 +6,7 @@ export function MainLayout({ children }: PropsWithChildren) {
     <div style={{ padding: 16 }}>
       <div
         style={{
-          position: 'fixed',
-          top: 8,
-          left: 8,
-          zIndex: 3000,
+          display: 'inline-block',
           background: '#0f172a',
           color: '#fff',
           fontSize: 12,
@@ -17,6 +14,7 @@ export function MainLayout({ children }: PropsWithChildren) {
           borderRadius: 999,
           lineHeight: 1.2,
           boxShadow: '0 1px 3px rgba(15, 23, 42, 0.35)',
+          marginBottom: 8,
         }}
       >
         v{APP_VERSION}

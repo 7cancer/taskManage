@@ -45,10 +45,10 @@ interface ViewRangeOption {
 }
 
 const BAR_COLORS: Record<TaskStatus, string> = {
-  todo: '#94a3b8',
-  inProgress: '#3b82f6',
-  review: '#f59e0b',
-  done: '#22c55e',
+  todo: '#E97B93',
+  inProgress: '#0794B8',
+  review: '#67B56A',
+  done: '#B8C73D',
 };
 
 const LEFT_COLUMN_WIDTH = 260;
@@ -517,6 +517,16 @@ export function GanttChart({ tasks }: GanttChartProps) {
     closeTaskModal();
   }
 
+  function handleSortByStartDate() {
+    const sorted = [...tasks].sort((a, b) => {
+      if (a.startDate !== b.startDate) return a.startDate.localeCompare(b.startDate);
+      if (a.endDate !== b.endDate) return a.endDate.localeCompare(b.endDate);
+      return a.taskId.localeCompare(b.taskId);
+    });
+
+    updateTasks(sorted.map((task, index) => ({ ...task, displayOrder: index + 1 })));
+  }
+
   return (
     <section style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8 }}>
       <div
@@ -535,6 +545,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <button type="button" onClick={openCreateModal}>タスク新規登録</button>
+            <button type="button" onClick={handleSortByStartDate}>開始日でソート</button>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               表示開始日:
               <input type="date" value={selectedStartDate} onChange={handleStartDateChange} />
@@ -563,9 +574,51 @@ export function GanttChart({ tasks }: GanttChartProps) {
       </div>
 
       <div style={{ border: '1px solid #e2e8f0', borderRadius: 6 }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)`,
+            position: 'sticky',
+            top: ganttHeaderStickyTop,
+            zIndex: 35,
+            background: '#f8fafc',
+            borderBottom: '1px solid #e2e8f0',
+          }}
+        >
+          <div style={{ padding: '8px 10px', fontWeight: 600, height: GANTT_HEADER_HEIGHT, boxSizing: 'border-box', display: 'flex', alignItems: 'center' }}>
+            タスク
+          </div>
+          <div style={{ height: GANTT_HEADER_HEIGHT, boxSizing: 'border-box', overflow: 'hidden' }}>
+            <div style={{ width: timelineWidth, transform: `translateX(-${timelineScrollLeft}px)` }}>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, background: '#f8fafc' }}>
+                {monthSpans.map((month) => (
+                  <div
+                    key={month.key}
+                    style={{
+                      gridColumn: `${month.startIndex + 1} / span ${month.span}`,
+                      textAlign: 'center',
+                      fontWeight: 600,
+                      padding: '4px 0 2px',
+                      borderLeft: '1px solid #e2e8f0',
+                    }}
+                  >
+                    {month.label}
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, borderTop: '1px solid #e2e8f0' }}>
+                {dayDates.map((date, index) => (
+                  <div key={index} style={{ textAlign: 'center', padding: '2px 0', borderLeft: '1px solid #e2e8f0', fontSize: 12 }}>
+                    {date.getDate()}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)` }}>
           <div>
-            <div style={{ padding: '8px 10px', fontWeight: 600, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', height: GANTT_HEADER_HEIGHT, boxSizing: 'border-box', display: 'flex', alignItems: 'center', position: 'sticky', top: ganttHeaderStickyTop, zIndex: 35 }}>タスク</div>
             {visibleRows.map(({ task, depth }) => (
               <div
                 key={`${task.taskId}-left`}
@@ -583,48 +636,8 @@ export function GanttChart({ tasks }: GanttChartProps) {
             ))}
           </div>
 
-          <div>
-            <div
-              style={{
-                borderBottom: '1px solid #e2e8f0',
-                height: GANTT_HEADER_HEIGHT,
-                boxSizing: 'border-box',
-                position: 'sticky',
-                top: ganttHeaderStickyTop,
-                zIndex: 35,
-                background: '#f8fafc',
-                overflow: 'hidden',
-              }}
-            >
-              <div style={{ width: timelineWidth, transform: `translateX(-${timelineScrollLeft}px)` }}>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, background: '#f8fafc' }}>
-                  {monthSpans.map((month) => (
-                    <div
-                      key={month.key}
-                      style={{
-                        gridColumn: `${month.startIndex + 1} / span ${month.span}`,
-                        textAlign: 'center',
-                        fontWeight: 600,
-                        padding: '4px 0 2px',
-                        borderLeft: '1px solid #e2e8f0',
-                      }}
-                    >
-                      {month.label}
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, borderTop: '1px solid #e2e8f0' }}>
-                  {dayDates.map((date, index) => (
-                    <div key={index} style={{ textAlign: 'center', padding: '2px 0', borderLeft: '1px solid #e2e8f0', fontSize: 12 }}>
-                      {date.getDate()}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div ref={timelineScrollRef} onScroll={handleTimelineScroll} style={{ overflowX: 'auto' }}>
-              <div style={{ width: timelineWidth }}>
+          <div ref={timelineScrollRef} onScroll={handleTimelineScroll} style={{ overflowX: 'auto' }}>
+            <div style={{ width: timelineWidth }}>
               {visibleRows.map(({ task, start, depth }) => {
                 const currentDragShift = dragShiftByTaskId.get(task.taskId) ?? 0;
                 const isDraggingThisTask = dragState?.affectedTaskIds.includes(task.taskId) ?? false;
@@ -835,6 +848,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
           </div>
         </div>
       </div>
+
 
       {contextMenu && (
         <GanttContextMenu x={contextMenu.x} y={contextMenu.y} onCreateTask={handleCreateTask} onClose={() => setContextMenu(null)} />
