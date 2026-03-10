@@ -175,6 +175,8 @@ export function GanttChart({ tasks }: GanttChartProps) {
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const [timelineScrollLeft, setTimelineScrollLeft] = useState(0);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(0);
+  const ganttToolbarRef = useRef<HTMLDivElement | null>(null);
+  const [ganttHeaderStickyTop, setGanttHeaderStickyTop] = useState(0);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dragOffsetDays, setDragOffsetDays] = useState(0);
   const dragOffsetDaysRef = useRef(0);
@@ -228,12 +230,20 @@ export function GanttChart({ tasks }: GanttChartProps) {
   }, [childrenByParentId, hideDoneTasks, tasks]);
 
   useEffect(() => {
-    if (!layout) return;
+    const toolbarElement = ganttToolbarRef.current;
+    if (!toolbarElement) return;
 
-    if (!selectedStartDate) {
-      setSelectedStartDate(formatLabel(layout.minStart));
-    }
-  }, [layout, selectedStartDate]);
+    const updateStickyTop = () => {
+      setGanttHeaderStickyTop(toolbarElement.getBoundingClientRect().height);
+    };
+
+    updateStickyTop();
+    window.addEventListener('resize', updateStickyTop);
+
+    return () => {
+      window.removeEventListener('resize', updateStickyTop);
+    };
+  }, [hideDoneTasks, selectedRangeId, selectedStartDate]);
 
 
   useEffect(() => {
@@ -510,6 +520,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
   return (
     <section style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8 }}>
       <div
+        ref={ganttToolbarRef}
         style={{
           position: 'sticky',
           top: 0,
@@ -554,7 +565,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
       <div style={{ border: '1px solid #e2e8f0', borderRadius: 6 }}>
         <div style={{ display: 'grid', gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)` }}>
           <div>
-            <div style={{ padding: '8px 10px', fontWeight: 600, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', height: GANTT_HEADER_HEIGHT, boxSizing: 'border-box', display: 'flex', alignItems: 'center' }}>タスク</div>
+            <div style={{ padding: '8px 10px', fontWeight: 600, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', height: GANTT_HEADER_HEIGHT, boxSizing: 'border-box', display: 'flex', alignItems: 'center', position: 'sticky', top: ganttHeaderStickyTop, zIndex: 35 }}>タスク</div>
             {visibleRows.map(({ task, depth }) => (
               <div
                 key={`${task.taskId}-left`}
@@ -572,9 +583,20 @@ export function GanttChart({ tasks }: GanttChartProps) {
             ))}
           </div>
 
-          <div ref={timelineScrollRef} onScroll={handleTimelineScroll} style={{ overflowX: 'auto' }}>
-            <div style={{ width: timelineWidth }}>
-              <div style={{ borderBottom: '1px solid #e2e8f0', height: GANTT_HEADER_HEIGHT, boxSizing: 'border-box' }}>
+          <div>
+            <div
+              style={{
+                borderBottom: '1px solid #e2e8f0',
+                height: GANTT_HEADER_HEIGHT,
+                boxSizing: 'border-box',
+                position: 'sticky',
+                top: ganttHeaderStickyTop,
+                zIndex: 35,
+                background: '#f8fafc',
+                overflow: 'hidden',
+              }}
+            >
+              <div style={{ width: timelineWidth, transform: `translateX(-${timelineScrollLeft}px)` }}>
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, background: '#f8fafc' }}>
                   {monthSpans.map((month) => (
                     <div
@@ -599,7 +621,10 @@ export function GanttChart({ tasks }: GanttChartProps) {
                   ))}
                 </div>
               </div>
+            </div>
 
+            <div ref={timelineScrollRef} onScroll={handleTimelineScroll} style={{ overflowX: 'auto' }}>
+              <div style={{ width: timelineWidth }}>
               {visibleRows.map(({ task, start, depth }) => {
                 const currentDragShift = dragShiftByTaskId.get(task.taskId) ?? 0;
                 const isDraggingThisTask = dragState?.affectedTaskIds.includes(task.taskId) ?? false;
@@ -805,6 +830,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
                   </div>
                 );
               })}
+              </div>
             </div>
           </div>
         </div>
