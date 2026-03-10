@@ -9,7 +9,9 @@
 
 ## 開発環境セットアップ（Windows 11 + Docker）
 
-PowerShellでリポジトリ直下に移動した状態で、以下を実行します。
+PowerShellでリポジトリ直下に移動した状態で実行します。
+
+### 初回実行時
 
 ```powershell
 docker run --rm -it `
@@ -17,6 +19,16 @@ docker run --rm -it `
   -w /app `
   -p 5173:5173 `
   node:24-alpine sh -lc "npm install && npm run dev -- --host 0.0.0.0"
+```
+
+### 2度目以降（依存関係の再インストールを省略する場合）
+
+```powershell
+docker run --rm -it `
+  -v "${PWD}:/app" `
+  -w /app `
+  -p 5173:5173 `
+  node:24-alpine sh -lc "npm run dev -- --host 0.0.0.0"
 ```
 
 ブラウザで `http://localhost:5173` を開くと開発版を確認できます。
@@ -31,13 +43,24 @@ docker run --rm -it `
 
 ## 配布用ZIP作成（Windows 11 + Docker）
 
-PowerShellでリポジトリ直下に移動した状態で、以下を実行します。
+PowerShellでリポジトリ直下に移動した状態で実行します。
+
+### 初回実行時
 
 ```powershell
 docker run --rm -it `
   -v "${PWD}:/app" `
   -w /app `
   node:24-alpine sh -lc "apk add --no-cache zip >/dev/null && npm install && npm run build:zip"
+```
+
+### 2度目以降（依存関係の再インストールを省略する場合）
+
+```powershell
+docker run --rm -it `
+  -v "${PWD}:/app" `
+  -w /app `
+  node:24-alpine sh -lc "apk add --no-cache zip >/dev/null && npm run build:zip"
 ```
 
 実行ログに `Created: /app/release/taskManage-build.zip` が出れば成功です。
@@ -55,6 +78,8 @@ docker run --rm -it `
 
 ## 配布ZIPの実行（Windows 11 ローカル）
 
+> 事前に Python 3（`py` または `python` コマンド）が利用できる状態にしてください。
+
 1. `release/taskManage-build.zip` を任意フォルダに解凍
 2. PowerShellで解凍先に移動
 3. 以下を実行
@@ -63,7 +88,14 @@ docker run --rm -it `
 ./run-local.cmd
 ```
 
-4. 既定ブラウザが自動で開きます（開かない場合は `http://localhost:4173` を手動で開く）
+4. ブラウザで `http://localhost:4173` を開く（自動で開かない場合は手動で開く）
+
+`localhost で接続が拒否されました` が出る場合は、数秒待って再読み込みしてください。
+
+`Python was not found; run without arguments to install from the Microsoft Store ...` が出る場合は、
+Windows の `App execution aliases` が反応している可能性があります。
+`py -V` が使えるか確認し、使えない場合は Python 3 をインストールしてください。
+（必要に応じて `Settings > Apps > Advanced app settings > App execution aliases` で Python alias を無効化）
 
 ## 現在の状態
 
@@ -107,4 +139,4 @@ npm run build:zip
 docker exec -it <container_name> sh -lc "cd /app && npm install && npm run build:zip"
 ```
 
-`release/taskManage-build.zip` が生成されます。ZIPを解凍後、同梱の `run-local.sh` または `run-local.ps1` を実行すると、`http://localhost:4173` でアプリを利用できます。
+`release/taskManage-build.zip` が生成されます。ZIPを解凍後、同梱の `run-local.cmd` を実行すると、`http://localhost:4173` でアプリを利用できます。
