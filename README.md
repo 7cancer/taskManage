@@ -9,7 +9,9 @@
 
 ## 開発環境セットアップ（Windows 11 + Docker）
 
-PowerShellでリポジトリ直下に移動した状態で、以下を実行します。
+PowerShellでリポジトリ直下に移動した状態で実行します。
+
+### 初回実行時
 
 ```powershell
 docker run --rm -it `
@@ -17,6 +19,16 @@ docker run --rm -it `
   -w /app `
   -p 5173:5173 `
   node:24-alpine sh -lc "npm install && npm run dev -- --host 0.0.0.0"
+```
+
+### 2度目以降（依存関係の再インストールを省略する場合）
+
+```powershell
+docker run --rm -it `
+  -v "${PWD}:/app" `
+  -w /app `
+  -p 5173:5173 `
+  node:24-alpine sh -lc "npm run dev -- --host 0.0.0.0"
 ```
 
 ブラウザで `http://localhost:5173` を開くと開発版を確認できます。
@@ -31,13 +43,24 @@ docker run --rm -it `
 
 ## 配布用ZIP作成（Windows 11 + Docker）
 
-PowerShellでリポジトリ直下に移動した状態で、以下を実行します。
+PowerShellでリポジトリ直下に移動した状態で実行します。
+
+### 初回実行時
 
 ```powershell
 docker run --rm -it `
   -v "${PWD}:/app" `
   -w /app `
   node:24-alpine sh -lc "apk add --no-cache zip >/dev/null && npm install && npm run build:zip"
+```
+
+### 2度目以降（依存関係の再インストールを省略する場合）
+
+```powershell
+docker run --rm -it `
+  -v "${PWD}:/app" `
+  -w /app `
+  node:24-alpine sh -lc "apk add --no-cache zip >/dev/null && npm run build:zip"
 ```
 
 実行ログに `Created: /app/release/taskManage-build.zip` が出れば成功です。
