@@ -165,6 +165,24 @@ export function GanttChart({ tasks }: GanttChartProps) {
     return new Map(dragState.affectedTaskIds.map((taskId) => [taskId, dragOffsetDays]));
   }, [dragOffsetDays, dragState]);
 
+  const hiddenTaskIdSet = useMemo(() => {
+    if (!hideDoneTasks) {
+      return new Set<string>();
+    }
+
+    const hiddenTaskIds = new Set<string>();
+    tasks.forEach((task) => {
+      if (task.status !== 'done') return;
+
+      hiddenTaskIds.add(task.taskId);
+      collectDescendantTaskIds(task.taskId, childrenByParentId).forEach((descendantTaskId) => {
+        hiddenTaskIds.add(descendantTaskId);
+      });
+    });
+
+    return hiddenTaskIds;
+  }, [childrenByParentId, hideDoneTasks, tasks]);
+
   useEffect(() => {
     if (!layout) return;
 
@@ -268,7 +286,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
   const timelineWidth = visibleDays * DAY_COLUMN_WIDTH;
   const dayDates = Array.from({ length: visibleDays }, (_, index) => addDays(viewStart, index));
   const monthSpans = buildMonthSpans(viewStart, visibleDays);
-  const visibleRows = currentLayout.rows.filter((row) => (hideDoneTasks ? row.task.status !== 'done' : true));
+  const visibleRows = currentLayout.rows.filter((row) => !hiddenTaskIdSet.has(row.task.taskId));
 
   function handleRangeChange(event: ChangeEvent<HTMLSelectElement>) {
     setSelectedRangeId(event.target.value);
