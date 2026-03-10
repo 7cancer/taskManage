@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
@@ -33,8 +33,8 @@ http://localhost:4173
 README
 
 cat > "$STAGING_DIR/run-local.sh" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 cd "$(dirname "$0")"
 python3 -m http.server 4173

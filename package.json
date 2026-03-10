@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
-    "build:zip": "bash scripts/create-build-zip.sh"
+    "build:zip": "sh scripts/create-build-zip.sh"
   },
   "dependencies": {
     "react": "^18.3.1",

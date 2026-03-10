@@ -36,17 +36,26 @@ npm run build:zip
 ```
 
 
-Docker上で動かしている場合は、コンテナ内で以下を実行してください。
+Dockerを使う場合は、**既存コンテナがなくても動く** `docker run` での実行が簡単です（`bash` 不要）。
+
+```powershell
+docker run --rm -it `
+  -v "${PWD}:/app" `
+  -w /app `
+  node:24-alpine sh -lc "npm install && npm run build:zip"
+```
+
+すでに起動中コンテナに入れている場合のみ、コンテナ内で以下を実行してください。
 
 ```bash
 npm install
 npm run build:zip
 ```
 
-ホスト側から実行する場合（コンテナ名が `taskmanage` の例）は以下です。
+`docker exec` を使う場合は、先に `docker ps` で確認した**実在するコンテナ名**を指定してください。
 
 ```bash
-docker exec -it taskmanage bash -lc "cd /workspace/taskManage && npm install && npm run build:zip"
+docker exec -it <container_name> sh -lc "cd /app && npm install && npm run build:zip"
 ```
 
 `release/taskManage-build.zip` が生成されます。ZIPを解凍後、同梱の `run-local.sh` または `run-local.ps1` を実行すると、`http://localhost:4173` でアプリを利用できます。
