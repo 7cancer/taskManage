@@ -11,6 +11,18 @@ cd "$ROOT_DIR"
 
 npm run build
 
+if ! command -v zip >/dev/null 2>&1; then
+  if command -v apk >/dev/null 2>&1; then
+    echo "zip command not found. Installing zip via apk..."
+    apk add --no-cache zip >/dev/null
+  fi
+fi
+
+if ! command -v zip >/dev/null 2>&1; then
+  echo "Error: zip command not found. Install zip and retry." >&2
+  exit 1
+fi
+
 rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR"
 cp -R "$DIST_DIR"/. "$STAGING_DIR"/
