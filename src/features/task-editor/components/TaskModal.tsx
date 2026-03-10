@@ -1,10 +1,12 @@
 import { ChangeEvent, useMemo, useState } from 'react';
-import { TASK_STATUS_LABELS, TASK_STATUS_ORDER } from '../../../domain/task/constants';
+import { TASK_STATUS_COLORS, TASK_STATUS_LABELS, TASK_STATUS_ORDER } from '../../../domain/task/constants';
 import { Task, TaskStatus } from '../../../domain/task/types';
 import { Modal } from '../../../shared/ui/Modal';
 import { TaskDeleteConfirm } from './TaskDeleteConfirm';
 
 export interface TaskFormValues {
+  taskId: string;
+  parentTaskId: string;
   taskName: string;
   status: TaskStatus | '';
   startDate: string;
@@ -15,11 +17,11 @@ export interface TaskFormValues {
 }
 
 
-const STATUS_COLORS: Record<TaskStatus, string> = {
-  todo: '#E97B93',
-  inProgress: '#0794B8',
-  review: '#67B56A',
-  done: '#B8C73D',
+const STATUS_ICONS: Record<TaskStatus, string> = {
+  todo: '🔴',
+  inProgress: '🔵',
+  review: '🟢',
+  done: '🟡',
 };
 
 function RequiredDot() {
@@ -38,7 +40,10 @@ interface TaskModalProps {
 
 export function TaskModal({ mode, values, editingTask, onChange, onSave, onClose, onDelete }: TaskModalProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const canSave = useMemo(() => values.taskName.trim().length > 0 && values.status !== '' && values.startDate !== '' && values.endDate !== '', [values.endDate, values.startDate, values.status, values.taskName]);
+  const canSave = useMemo(
+    () => values.taskId.trim().length > 0 && values.taskName.trim().length > 0 && values.status !== '' && values.startDate !== '' && values.endDate !== '',
+    [values.endDate, values.startDate, values.status, values.taskId, values.taskName],
+  );
 
   function handleChange<K extends keyof TaskFormValues>(key: K) {
     return (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -61,8 +66,20 @@ export function TaskModal({ mode, values, editingTask, onChange, onSave, onClose
       <div onClick={(event) => event.stopPropagation()}>
         <Modal>
           <div style={{ background: '#fff', width: 560, borderRadius: 12, padding: 24 }}>
-            <h3 style={{ marginTop: 0 }}>{mode === 'edit' ? 'タスク編集' : 'タスク新規登録'}</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <h3 style={{ margin: 0 }}>{mode === 'edit' ? 'タスク編集' : 'タスク新規登録'}</h3>
+              {mode === 'edit' && (
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 13, color: '#475569' }}>taskId</span>
+                  <input style={{ width: 180, background: '#f1f5f9', color: '#334155' }} value={values.taskId} readOnly />
+                </label>
+              )}
+            </div>
             <div style={{ display: 'grid', gap: 14 }}>
+              <label>
+                <span>親タスクID</span>
+                <input style={{ width: '100%' }} value={values.parentTaskId} onChange={handleChange('parentTaskId')} placeholder="未設定の場合は空欄" />
+              </label>
               <label>
                 <span>プロジェクト</span>
                 <input style={{ width: '100%' }} value={values.project} onChange={handleChange('project')} />
@@ -74,14 +91,19 @@ export function TaskModal({ mode, values, editingTask, onChange, onSave, onClose
               <label>
                 <span>ステータス<RequiredDot /></span>
                 <select
-                  style={{ width: '100%', background: values.status ? STATUS_COLORS[values.status] : '#fff' }}
+                  style={{
+                    width: '100%',
+                    background: values.status ? `${TASK_STATUS_COLORS[values.status]}22` : '#fff',
+                    color: '#0f172a',
+                    fontWeight: 600,
+                  }}
                   value={values.status}
                   onChange={handleChange('status')}
                 >
-                  <option value="">-</option>
+                  <option value="" style={{ background: '#fff', color: '#0f172a' }}>-</option>
                   {TASK_STATUS_ORDER.map((status) => (
-                    <option key={status} value={status}>
-                      {TASK_STATUS_LABELS[status]}
+                    <option key={status} value={status} style={{ background: '#fff', color: '#0f172a' }}>
+                      {STATUS_ICONS[status]} {TASK_STATUS_LABELS[status]}
                     </option>
                   ))}
                 </select>
@@ -115,7 +137,21 @@ export function TaskModal({ mode, values, editingTask, onChange, onSave, onClose
               </div>
               <div style={{ display: 'inline-flex', gap: 8 }}>
                 <button type="button" onClick={onClose} style={{ minWidth: 120 }}>キャンセル</button>
-                <button type="button" onClick={onSave} disabled={!canSave} style={{ minWidth: 120, background: '#16a34a', color: '#fff', border: '1px solid #15803d' }}>保存</button>
+                <button
+                  type="button"
+                  onClick={onSave}
+                  disabled={!canSave}
+                  style={{
+                    minWidth: 120,
+                    background: canSave ? '#16a34a' : '#94a3b8',
+                    color: '#fff',
+                    border: `1px solid ${canSave ? '#15803d' : '#64748b'}`,
+                    cursor: canSave ? 'pointer' : 'not-allowed',
+                    opacity: canSave ? 1 : 0.9,
+                  }}
+                >
+                  保存
+                </button>
               </div>
             </div>
             {mode === 'edit' && onDelete && confirmDelete && editingTask && (

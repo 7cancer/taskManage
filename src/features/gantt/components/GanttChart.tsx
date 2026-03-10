@@ -1,4 +1,5 @@
 import { ChangeEvent, MouseEvent, UIEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { TASK_STATUS_COLORS, TASK_STATUS_LABELS } from '../../../domain/task/constants';
 import { Task, TaskStatus } from '../../../domain/task/types';
 import { TaskFormValues, TaskModal } from '../../task-editor/components/TaskModal';
 import { generateTaskId } from '../../../shared/lib/id';
@@ -44,12 +45,7 @@ interface ViewRangeOption {
   days: number;
 }
 
-const BAR_COLORS: Record<TaskStatus, string> = {
-  todo: '#E97B93',
-  inProgress: '#0794B8',
-  review: '#67B56A',
-  done: '#B8C73D',
-};
+const BAR_COLORS: Record<TaskStatus, string> = TASK_STATUS_COLORS;
 
 const LEFT_COLUMN_WIDTH = 260;
 const DAY_COLUMN_WIDTH = 28;
@@ -177,6 +173,8 @@ function normalizeDateRange(startDate: string, endDate: string): { startDate: st
 function buildInitialTaskForm(task?: Task): TaskFormValues {
   if (task) {
     return {
+      taskId: task.taskId,
+      parentTaskId: task.parentTaskId ?? '',
       taskName: task.taskName,
       status: task.status,
       startDate: task.startDate,
@@ -189,6 +187,8 @@ function buildInitialTaskForm(task?: Task): TaskFormValues {
 
   const today = formatLabel(new Date());
   return {
+    taskId: generateTaskId(),
+    parentTaskId: '',
     taskName: '',
     status: '',
     startDate: today,
@@ -535,7 +535,22 @@ export function GanttChart({ tasks }: GanttChartProps) {
   }
 
   function handleSaveTask() {
-    if (!taskForm.taskName.trim() || taskForm.status === '') {
+    const normalizedTaskId = taskForm.taskId.trim();
+    const normalizedParentTaskId = taskForm.parentTaskId.trim() || undefined;
+
+    if (!normalizedTaskId || !taskForm.taskName.trim() || taskForm.status === '') {
+      return;
+    }
+
+    if (!editingTaskId && taskById.has(normalizedTaskId)) {
+      return;
+    }
+
+    if (normalizedParentTaskId && !taskById.has(normalizedParentTaskId)) {
+      return;
+    }
+
+    if (normalizedParentTaskId && normalizedParentTaskId === normalizedTaskId) {
       return;
     }
 
@@ -547,6 +562,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
 
       updateTask({
         ...existingTask,
+        parentTaskId: normalizedParentTaskId,
         taskName: taskForm.taskName.trim(),
         status: taskForm.status as TaskStatus,
         startDate: normalized.startDate,
@@ -558,9 +574,9 @@ export function GanttChart({ tasks }: GanttChartProps) {
     } else {
       const displayOrder = tasks.reduce((max, task) => Math.max(max, task.displayOrder), 0) + 1;
       addTask({
-        taskId: generateTaskId(),
+        taskId: normalizedTaskId,
         taskName: taskForm.taskName.trim(),
-        parentTaskId: undefined,
+        parentTaskId: normalizedParentTaskId,
         status: taskForm.status as TaskStatus,
         startDate: normalized.startDate,
         endDate: normalized.endDate,
@@ -575,6 +591,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
 
     closeTaskModal();
   }
+
 
   function handleDeleteTask() {
     if (!editingTaskId) return;
@@ -610,10 +627,10 @@ export function GanttChart({ tasks }: GanttChartProps) {
       >
         <h2 style={{ margin: '0 0 8px' }}>ガントチャート</h2>
         <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <span style={{ background: BAR_COLORS.todo, opacity: 0.62, color: '#0f172a', fontWeight: 600, padding: '4px 8px', borderRadius: 2, minWidth: 90, textAlign: 'center', boxSizing: 'border-box' }}>未対応</span>
-          <span style={{ background: BAR_COLORS.inProgress, opacity: 0.62, color: '#0f172a', fontWeight: 600, padding: '4px 8px', borderRadius: 2, minWidth: 90, textAlign: 'center', boxSizing: 'border-box' }}>処理中</span>
-          <span style={{ background: BAR_COLORS.review, opacity: 0.62, color: '#0f172a', fontWeight: 600, padding: '4px 8px', borderRadius: 2, minWidth: 90, textAlign: 'center', boxSizing: 'border-box' }}>処理済み</span>
-          <span style={{ background: BAR_COLORS.done, opacity: 0.62, color: '#0f172a', fontWeight: 600, padding: '4px 8px', borderRadius: 2, minWidth: 90, textAlign: 'center', boxSizing: 'border-box' }}>完了</span>
+          <span style={{ background: BAR_COLORS.todo, opacity: 0.62, color: '#0f172a', fontWeight: 600, padding: '4px 8px', borderRadius: 2, minWidth: 90, textAlign: 'center', boxSizing: 'border-box' }}>{TASK_STATUS_LABELS.todo}</span>
+          <span style={{ background: BAR_COLORS.inProgress, opacity: 0.62, color: '#0f172a', fontWeight: 600, padding: '4px 8px', borderRadius: 2, minWidth: 90, textAlign: 'center', boxSizing: 'border-box' }}>{TASK_STATUS_LABELS.inProgress}</span>
+          <span style={{ background: BAR_COLORS.review, opacity: 0.62, color: '#0f172a', fontWeight: 600, padding: '4px 8px', borderRadius: 2, minWidth: 90, textAlign: 'center', boxSizing: 'border-box' }}>{TASK_STATUS_LABELS.review}</span>
+          <span style={{ background: BAR_COLORS.done, opacity: 0.62, color: '#0f172a', fontWeight: 600, padding: '4px 8px', borderRadius: 2, minWidth: 90, textAlign: 'center', boxSizing: 'border-box' }}>{TASK_STATUS_LABELS.done}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -809,7 +826,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
                     ))}
                     {visibleDurationDays > 0 && (
                       <div
-                        title={`${isDraggingThisTask ? shiftTaskDateText(task.startDate, currentDragShift) : task.startDate} - ${isDraggingThisTask ? shiftTaskDateText(task.endDate, currentDragShift) : task.endDate}`}
+                        title={`taskId: ${task.taskId} | ${isDraggingThisTask ? shiftTaskDateText(task.startDate, currentDragShift) : task.startDate} - ${isDraggingThisTask ? shiftTaskDateText(task.endDate, currentDragShift) : task.endDate}`}
                         style={{
                           position: 'absolute',
                           left: visibleStartDay * DAY_COLUMN_WIDTH,
@@ -934,6 +951,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
             </div>
           </div>
         </div>
+
 
 
 
