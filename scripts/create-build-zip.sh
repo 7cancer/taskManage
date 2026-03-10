@@ -33,24 +33,9 @@ TaskManage ビルド版（Windows 11 ローカル実行想定）
 ■ 使い方
 1. このZIPを任意の場所に解凍
 2. PowerShellで解凍先フォルダへ移動
-3. `./run-local.cmd` を実行（推奨）
-   ※ PowerShell実行ポリシーで .ps1 がブロックされる環境でも実行可能
+3. `./run-local.cmd` を実行
 4. ブラウザで http://localhost:4173 を開く
 README
-
-cat > "$STAGING_DIR/run-local.sh" <<'SH'
-#!/bin/sh
-set -eu
-
-cd "$(dirname "$0")"
-python3 -m http.server 4173
-SH
-chmod +x "$STAGING_DIR/run-local.sh"
-
-cat > "$STAGING_DIR/run-local.ps1" <<'PS1'
-Set-Location -Path $PSScriptRoot
-python -m http.server 4173
-PS1
 
 cat > "$STAGING_DIR/run-local.cmd" <<'CMD'
 @echo off

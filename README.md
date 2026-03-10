@@ -65,8 +65,6 @@ docker run --rm -it `
 
 4. ブラウザで `http://localhost:4173` を開く
 
-> `run-local.ps1` はPowerShellの実行ポリシーでブロックされる場合があります。その場合は `run-local.cmd` を使ってください。
-
 ## 現在の状態
 
 - `src/` に機能別の空ファイルひな型を配置済み
