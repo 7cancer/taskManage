@@ -49,6 +49,8 @@ const VIEW_RANGE_OPTIONS: ViewRangeOption[] = [
 const PARENT_BAR_HEIGHT = 34;
 const CHILD_BAR_HEIGHT = 28;
 const DESCENDANT_BAR_HEIGHT = 22;
+const GANTT_ROW_HEIGHT = 46;
+const GANTT_HEADER_HEIGHT = 50;
 
 function getBarHeight(depth: number): number {
   if (depth <= 0) return PARENT_BAR_HEIGHT;
@@ -62,28 +64,8 @@ function getBarOpacity(depth: number): number {
   return 0.75;
 }
 
-function buildMonthSpans(startDate: Date, totalDays: number): MonthSpan[] {
-  const spans: MonthSpan[] = [];
-
-  for (let dayIndex = 0; dayIndex < totalDays; dayIndex += 1) {
-    const date = addDays(startDate, dayIndex);
-    const key = `${date.getFullYear()}-${date.getMonth()}`;
-    const label = `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}`;
-    const latest = spans[spans.length - 1];
-
-    if (latest && latest.key === key) {
-      latest.span += 1;
-      continue;
-    }
-
-    spans.push({ key, label, startIndex: dayIndex, span: 1 });
-  }
-
-  return spans;
-}
-
-function clamp(number: number, min: number, max: number): number {
-  return Math.min(Math.max(number, min), max);
+function formatLabel(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }
 
 function addDays(baseDate: Date, offset: number): Date {
@@ -218,7 +200,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
       <div style={{ border: '1px solid #e2e8f0', borderRadius: 6 }}>
         <div style={{ display: 'grid', gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)` }}>
           <div>
-            <div style={{ padding: '8px 10px', fontWeight: 600, background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>タスク</div>
+            <div style={{ padding: '8px 10px', fontWeight: 600, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', height: GANTT_HEADER_HEIGHT, boxSizing: 'border-box', display: 'flex', alignItems: 'center' }}>タスク</div>
             {currentLayout.rows.map(({ task, depth }) => (
               <div
                 key={`${task.taskId}-left`}
@@ -226,7 +208,8 @@ export function GanttChart({ tasks }: GanttChartProps) {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  minHeight: 46,
+                  height: GANTT_ROW_HEIGHT,
+                  boxSizing: 'border-box',
                   borderTop: '1px solid #f1f5f9',
                 }}
               >
@@ -237,7 +220,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
 
           <div style={{ overflowX: 'auto' }}>
             <div style={{ width: timelineWidth }}>
-              <div style={{ borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ borderBottom: '1px solid #e2e8f0', height: GANTT_HEADER_HEIGHT, boxSizing: 'border-box' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, background: '#f8fafc' }}>
                   {monthSpans.map((month) => (
                     <div
@@ -246,7 +229,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
                         gridColumn: `${month.startIndex + 1} / span ${month.span}`,
                         textAlign: 'center',
                         fontWeight: 600,
-                        padding: '8px 0 6px',
+                        padding: '4px 0 2px',
                         borderLeft: '1px solid #e2e8f0',
                       }}
                     >
@@ -256,7 +239,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, borderTop: '1px solid #e2e8f0' }}>
                   {dayDates.map((date, index) => (
-                    <div key={index} style={{ textAlign: 'center', padding: '6px 0', borderLeft: '1px solid #e2e8f0', fontSize: 12 }}>
+                    <div key={index} style={{ textAlign: 'center', padding: '2px 0', borderLeft: '1px solid #e2e8f0', fontSize: 12 }}>
                       {date.getDate()}
                     </div>
                   ))}
@@ -313,7 +296,8 @@ export function GanttChart({ tasks }: GanttChartProps) {
                     onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}
                     style={{
                       position: 'relative',
-                      height: 46,
+                      height: GANTT_ROW_HEIGHT,
+                      boxSizing: 'border-box',
                       borderTop: '1px solid #f1f5f9',
                       backgroundImage: `repeating-linear-gradient(to right, #e2e8f0, #e2e8f0 1px, transparent 1px, transparent ${DAY_COLUMN_WIDTH}px)`,
                     }}
@@ -341,7 +325,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
                           width: visibleDurationDays * DAY_COLUMN_WIDTH,
                           minWidth: 8,
                           height: getBarHeight(depth),
-                          top: 23 - getBarHeight(depth) / 2,
+                          top: GANTT_ROW_HEIGHT / 2 - getBarHeight(depth) / 2,
                           borderRadius: 2,
                           background: BAR_COLORS[task.status],
                           opacity: getBarOpacity(depth),
@@ -354,60 +338,6 @@ export function GanttChart({ tasks }: GanttChartProps) {
             </div>
           </div>
         </div>
-
-        {currentLayout.rows.map(({ task, start, end, depth }) => {
-          const startOffsetDays = getDateOffsetDays(viewStart, start);
-          const endOffsetDays = getDateOffsetDays(viewStart, end);
-
-          const visibleStartDay = clamp(startOffsetDays, 0, visibleDays);
-          const visibleEndDay = clamp(endOffsetDays + 1, 0, visibleDays);
-          const visibleDurationDays = Math.max(visibleEndDay - visibleStartDay, 0);
-
-          return (
-            <div
-              key={task.taskId}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)`,
-                alignItems: 'center',
-                minHeight: 42,
-                borderTop: '1px solid #f1f5f9',
-              }}
-            >
-              <div onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}>
-                <GanttRowTree taskName={task.taskName} depth={depth} />
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <div
-                  onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}
-                  style={{
-                    position: 'relative',
-                    height: 24,
-                    width: timelineWidth,
-                    backgroundImage: `repeating-linear-gradient(to right, #e2e8f0, #e2e8f0 1px, transparent 1px, transparent ${DAY_COLUMN_WIDTH}px)`,
-                  }}
-                >
-                  {visibleDurationDays > 0 && (
-                    <div
-                      title={`${task.startDate} - ${task.endDate}`}
-                      style={{
-                        position: 'absolute',
-                        left: visibleStartDay * DAY_COLUMN_WIDTH,
-                        width: visibleDurationDays * DAY_COLUMN_WIDTH,
-                        minWidth: 8,
-                        top: 2,
-                        bottom: 2,
-                        borderRadius: 999,
-                        background: BAR_COLORS[task.status],
-                        opacity: 0.95,
-                      }}
-                    />
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
       </div>
 
       {contextMenu && (
