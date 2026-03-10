@@ -1,6 +1,6 @@
 import { ChangeEvent, MouseEvent, UIEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Task, TaskStatus } from '../../../domain/task/types';
-import { addTask } from '../../../store/actions/taskCrud';
+import { addTask, updateTask } from '../../../store/actions/taskCrud';
 import { GanttContextMenu } from './GanttContextMenu';
 import { GanttRowTree } from './GanttRowTree';
 import { createTaskFromRightClick } from '../interactions/rightClickCreate';
@@ -15,6 +15,11 @@ interface ContextMenuState {
   y: number;
   clickedDate: Date;
   parentTaskId?: string;
+}
+
+interface DragState {
+  task: Task;
+  startClientX: number;
 }
 
 interface MonthSpan {
@@ -75,6 +80,12 @@ function addDays(baseDate: Date, offset: number): Date {
   return next;
 }
 
+function shiftTaskDateText(dateText: string, offsetDays: number): string {
+  const date = new Date(dateText);
+  if (Number.isNaN(date.getTime())) return dateText;
+  return formatLabel(addDays(date, offsetDays));
+}
+
 function buildMonthSpans(startDate: Date, totalDays: number): MonthSpan[] {
   const spans: MonthSpan[] = [];
 
@@ -108,6 +119,9 @@ export function GanttChart({ tasks }: GanttChartProps) {
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const [timelineScrollLeft, setTimelineScrollLeft] = useState(0);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(0);
+  const [dragState, setDragState] = useState<DragState | null>(null);
+  const [dragOffsetDays, setDragOffsetDays] = useState(0);
+  const dragOffsetDaysRef = useRef(0);
 
   const selectedOption = VIEW_RANGE_OPTIONS.find((item) => item.id === selectedRangeId) ?? VIEW_RANGE_OPTIONS[1];
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.taskId, task])), [tasks]);
@@ -143,6 +157,48 @@ export function GanttChart({ tasks }: GanttChartProps) {
     setTimelineScrollLeft(event.currentTarget.scrollLeft);
     setTimelineViewportWidth(event.currentTarget.clientWidth);
   }
+
+  function handleBarMouseDown(event: MouseEvent<HTMLDivElement>, task: Task) {
+    event.preventDefault();
+    setDragState({ task, startClientX: event.clientX });
+    setDragOffsetDays(0);
+    dragOffsetDaysRef.current = 0;
+  }
+
+  useEffect(() => {
+    if (!dragState) return;
+
+    const onMouseMove = (event: globalThis.MouseEvent) => {
+      const diffX = event.clientX - dragState.startClientX;
+      const nextOffsetDays = Math.round(diffX / DAY_COLUMN_WIDTH);
+      setDragOffsetDays(nextOffsetDays);
+      dragOffsetDaysRef.current = nextOffsetDays;
+    };
+
+    const onMouseUp = () => {
+      const finalOffsetDays = dragOffsetDaysRef.current;
+
+      if (finalOffsetDays !== 0) {
+        updateTask({
+          ...dragState.task,
+          startDate: shiftTaskDateText(dragState.task.startDate, finalOffsetDays),
+          endDate: shiftTaskDateText(dragState.task.endDate, finalOffsetDays),
+        });
+      }
+
+      setDragState(null);
+      setDragOffsetDays(0);
+      dragOffsetDaysRef.current = 0;
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [dragState]);
 
   if (!layout) {
     return (
@@ -286,8 +342,12 @@ export function GanttChart({ tasks }: GanttChartProps) {
               </div>
 
               {visibleRows.map(({ task, start, end, depth }) => {
-                const startOffsetDays = getDateOffsetDays(viewStart, start);
-                const endOffsetDays = getDateOffsetDays(viewStart, end);
+                const isDraggingThisTask = dragState?.task.taskId === task.taskId;
+                const effectiveStart = isDraggingThisTask ? new Date(shiftTaskDateText(task.startDate, dragOffsetDays)) : start;
+                const effectiveEnd = isDraggingThisTask ? new Date(shiftTaskDateText(task.endDate, dragOffsetDays)) : end;
+
+                const startOffsetDays = getDateOffsetDays(viewStart, effectiveStart);
+                const endOffsetDays = getDateOffsetDays(viewStart, effectiveEnd);
 
                 const visibleStartDay = clamp(startOffsetDays, 0, visibleDays);
                 const visibleEndDay = clamp(endOffsetDays + 1, 0, visibleDays);
@@ -357,7 +417,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
                     ))}
                     {visibleDurationDays > 0 && (
                       <div
-                        title={`${task.startDate} - ${task.endDate}`}
+                        title={`${isDraggingThisTask ? shiftTaskDateText(task.startDate, dragOffsetDays) : task.startDate} - ${isDraggingThisTask ? shiftTaskDateText(task.endDate, dragOffsetDays) : task.endDate}`}
                         style={{
                           position: 'absolute',
                           left: visibleStartDay * DAY_COLUMN_WIDTH,
@@ -368,7 +428,9 @@ export function GanttChart({ tasks }: GanttChartProps) {
                           borderRadius: 2,
                           background: BAR_COLORS[task.status],
                           opacity: getBarOpacity(depth),
+                          cursor: isDraggingThisTask ? 'grabbing' : 'grab',
                         }}
+                        onMouseDown={(event) => handleBarMouseDown(event, task)}
                       />
                     )}
                     {(() => {
