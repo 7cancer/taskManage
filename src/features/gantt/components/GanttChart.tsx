@@ -44,6 +44,7 @@ const VIEW_RANGE_OPTIONS: ViewRangeOption[] = [
   { id: '1m', label: '1ヶ月', days: 31 },
   { id: '2m', label: '2ヶ月', days: 62 },
   { id: '3m', label: '3ヶ月', days: 93 },
+  { id: '6m', label: '6ヶ月', days: 186 },
 ];
 
 const PARENT_BAR_HEIGHT = 34;
@@ -101,8 +102,9 @@ function clamp(number: number, min: number, max: number): number {
 export function GanttChart({ tasks }: GanttChartProps) {
   const layout = useMemo(() => calculateGanttLayout(tasks), [tasks]);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [selectedRangeId, setSelectedRangeId] = useState<string>('1m');
+  const [selectedRangeId, setSelectedRangeId] = useState<string>('3m');
   const [selectedStartDate, setSelectedStartDate] = useState<string>('');
+  const [hideDoneTasks, setHideDoneTasks] = useState(false);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const [timelineScrollLeft, setTimelineScrollLeft] = useState(0);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(0);
@@ -159,6 +161,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
   const timelineWidth = visibleDays * DAY_COLUMN_WIDTH;
   const dayDates = Array.from({ length: visibleDays }, (_, index) => addDays(viewStart, index));
   const monthSpans = buildMonthSpans(viewStart, visibleDays);
+  const visibleRows = currentLayout.rows.filter((row) => (hideDoneTasks ? row.task.status !== 'done' : true));
 
   function handleRangeChange(event: ChangeEvent<HTMLSelectElement>) {
     setSelectedRangeId(event.target.value);
@@ -166,6 +169,10 @@ export function GanttChart({ tasks }: GanttChartProps) {
 
   function handleStartDateChange(event: ChangeEvent<HTMLInputElement>) {
     setSelectedStartDate(event.target.value);
+  }
+
+  function handleHideDoneChange(event: ChangeEvent<HTMLInputElement>) {
+    setHideDoneTasks(event.target.checked);
   }
 
   function handleRowContextMenu(event: MouseEvent<HTMLDivElement>, parentTaskId?: string) {
@@ -211,23 +218,29 @@ export function GanttChart({ tasks }: GanttChartProps) {
             表示期間: {formatLabel(viewStart)} 〜 {formatLabel(viewEnd)}
           </p>
         </div>
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          期間:
-          <select value={selectedRangeId} onChange={handleRangeChange}>
-            {VIEW_RANGE_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            期間:
+            <select value={selectedRangeId} onChange={handleRangeChange}>
+              {VIEW_RANGE_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={hideDoneTasks} onChange={handleHideDoneChange} />
+            完了タスクを非表示
+          </label>
+        </div>
       </div>
 
       <div style={{ border: '1px solid #e2e8f0', borderRadius: 6 }}>
         <div style={{ display: 'grid', gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)` }}>
           <div>
             <div style={{ padding: '8px 10px', fontWeight: 600, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', height: GANTT_HEADER_HEIGHT, boxSizing: 'border-box', display: 'flex', alignItems: 'center' }}>タスク</div>
-            {currentLayout.rows.map(({ task, depth }) => (
+            {visibleRows.map(({ task, depth }) => (
               <div
                 key={`${task.taskId}-left`}
                 onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}
@@ -272,7 +285,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
                 </div>
               </div>
 
-              {currentLayout.rows.map(({ task, start, end, depth }) => {
+              {visibleRows.map(({ task, start, end, depth }) => {
                 const startOffsetDays = getDateOffsetDays(viewStart, start);
                 const endOffsetDays = getDateOffsetDays(viewStart, end);
 
