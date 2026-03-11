@@ -1,4 +1,4 @@
-name: Update release zip
+name: Update release ZIP
 
 on:
   push:
