@@ -3,7 +3,7 @@ set -eu
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
-RELEASE_DIR="$ROOT_DIR/release"
+RELEASE_DIR="$ROOT_DIR/../配布版ビルド済みディレクトリ"
 STAGING_DIR="$RELEASE_DIR/taskManage-build"
 ZIP_PATH="$RELEASE_DIR/taskManage-build.zip"
 

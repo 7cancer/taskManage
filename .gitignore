@@ -1,7 +1,9 @@
 node_modules/
-dist/
-.vite/
+開発用ディレクトリ/node_modules/
+開発用ディレクトリ/dist/
+開発用ディレクトリ/.vite/
 *.log
 .DS_Store
 
-release/
+配布版ビルド済みディレクトリ/taskManage-build/
+配布版ビルド済みディレクトリ/taskManage-build.zip
