@@ -20,8 +20,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -35,14 +33,9 @@ jobs:
       - name: Build release zip
         run: npm run build:zip
 
-      - name: Commit updated zip
-        run: |
-          git add release/taskManage-build.zip
-
-          if git diff --cached --quiet -- release/taskManage-build.zip; then
-            echo "No changes in release/taskManage-build.zip"
-            exit 0
-          fi
+      - name: Read app version
+        id: app_version
+        run: echo "tag=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
