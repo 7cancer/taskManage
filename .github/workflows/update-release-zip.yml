@@ -3,7 +3,7 @@ name: Update release ZIP
 on:
   push:
     branches:
-      - '**'
+      - 'main'
     paths-ignore:
       - 'release/taskManage-build.zip'
 
