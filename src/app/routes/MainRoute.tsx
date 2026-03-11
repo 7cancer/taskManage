@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { CSSProperties, useMemo, useState } from 'react';
 import { TASK_STATUS_LABELS, TASK_STATUS_ORDER } from '../../domain/task/constants';
 import { Task, TaskStatus } from '../../domain/task/types';
 import { CsvImportDialog } from '../../features/csv-import/components/CsvImportDialog';
@@ -7,6 +7,16 @@ import { saveTasksToCsvStorage, saveTasksToLocalStorage, serializeTasksToCsv } f
 import { useTaskStore } from '../../store/taskStore';
 import { TabItem, Tabs } from '../../shared/ui/Tabs';
 import { MainLayout } from '../layout/MainLayout';
+
+const PANEL_STYLE: CSSProperties = { marginTop: 8, padding: 12, background: '#fff', borderRadius: 8 };
+const LIST_STYLE: CSSProperties = { marginTop: 16, padding: 12, background: '#fff', borderRadius: 8 };
+
+const VIEW_TABS: TabItem[] = [
+  { id: 'gantt', label: 'ガント' },
+  { id: 'list', label: '一覧' },
+];
+
+type ViewTab = 'gantt' | 'list';
 
 function sortTasks(tasks: Task[]): Task[] {
   return [...tasks].sort((a, b) => {
@@ -18,21 +28,28 @@ function sortTasks(tasks: Task[]): Task[] {
   });
 }
 
-function groupTasksByStatus(tasks: Task[]): Record<TaskStatus, Task[]> {
+function createEmptyTaskGroups(): Record<TaskStatus, Task[]> {
   return {
-    todo: sortTasks(tasks.filter((task) => task.status === 'todo')),
-    inProgress: sortTasks(tasks.filter((task) => task.status === 'inProgress')),
-    review: sortTasks(tasks.filter((task) => task.status === 'review')),
-    done: sortTasks(tasks.filter((task) => task.status === 'done')),
+    todo: [],
+    inProgress: [],
+    review: [],
+    done: [],
   };
 }
 
-const VIEW_TABS: TabItem[] = [
-  { id: 'gantt', label: 'ガント' },
-  { id: 'list', label: '一覧' },
-];
+function groupTasksByStatus(tasks: Task[]): Record<TaskStatus, Task[]> {
+  const grouped = createEmptyTaskGroups();
 
-type ViewTab = 'gantt' | 'list';
+  for (const task of tasks) {
+    grouped[task.status].push(task);
+  }
+
+  for (const status of TASK_STATUS_ORDER) {
+    grouped[status] = sortTasks(grouped[status]);
+  }
+
+  return grouped;
+}
 
 function addDays(date: Date, days: number): Date {
   const next = new Date(date);
@@ -114,10 +131,20 @@ function downloadCsv(csvText: string, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
+function formatTaskSummary(task: Task): string {
+  return [
+    `[${task.displayOrder}] ${task.taskId}`,
+    task.taskName,
+    `${task.startDate} - ${task.endDate}`,
+    `PJ:${task.project ?? '-'}`,
+    `Cat:${task.category ?? '-'}`,
+  ].join(' | ');
+}
+
 export function MainRoute() {
   const tasks = useTaskStore((state) => state.tasks);
-  const groupedTasks = useMemo(() => groupTasksByStatus(tasks), [tasks]);
   const setTasks = useTaskStore((state) => state.setTasks);
+  const groupedTasks = useMemo(() => groupTasksByStatus(tasks), [tasks]);
   const [activeView, setActiveView] = useState<ViewTab>('gantt');
 
   function handleCreateProject() {
@@ -131,7 +158,7 @@ export function MainRoute() {
   return (
     <MainLayout>
       <CsvImportDialog />
-      <section style={{ marginTop: 8, padding: 12, background: '#fff', borderRadius: 8 }}>
+      <section style={PANEL_STYLE}>
         <button type="button" onClick={handleCreateProject}>プロジェクト作成</button>
       </section>
       <Tabs items={VIEW_TABS} activeId={activeView} onChange={(id) => setActiveView(id as ViewTab)} />
@@ -139,7 +166,7 @@ export function MainRoute() {
       {activeView === 'gantt' ? (
         <GanttChart tasks={tasks} />
       ) : (
-        <section style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8 }}>
+        <section style={LIST_STYLE}>
           <h2 style={{ marginTop: 0 }}>読込済みタスク（簡易一覧）</h2>
           <p>件数: {tasks.length}</p>
 
@@ -151,9 +178,7 @@ export function MainRoute() {
               ) : (
                 <ul style={{ marginTop: 0 }}>
                   {groupedTasks[status].map((task) => (
-                    <li key={task.taskId}>
-                      [{task.displayOrder}] {task.taskId} | {task.taskName} | {task.startDate} - {task.endDate} | PJ:{task.project ?? '-'} | Cat:{task.category ?? '-'}
-                    </li>
+                    <li key={task.taskId}>{formatTaskSummary(task)}</li>
                   ))}
                 </ul>
               )}
