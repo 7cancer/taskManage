@@ -1,11 +1,9 @@
-name: Update release ZIP
+name: Publish release ZIP
 
 on:
   push:
     branches:
-      - 'main'
-    paths-ignore:
-      - 'release/taskManage-build.zip'
+      - main
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -14,14 +12,12 @@ permissions:
   contents: write
 
 jobs:
-  rebuild-and-commit-zip:
+  build-and-publish-release:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -35,17 +31,14 @@ jobs:
       - name: Build release zip
         run: npm run build:zip
 
-      - name: Commit updated zip
-        run: |
-          git add release/taskManage-build.zip
+      - name: Read app version
+        id: app_version
+        run: echo "tag=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
 
-          if git diff --cached --quiet -- release/taskManage-build.zip; then
-            echo "No changes in release/taskManage-build.zip"
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git commit -m "chore: update release/taskManage-build.zip"
-          git push
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.app_version.outputs.tag }}
+          name: ${{ steps.app_version.outputs.tag }}
+          files: release/taskManage-build.zip
+          fail_on_unmatched_files: true
