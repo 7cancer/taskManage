@@ -27,6 +27,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
+          package-manager-cache: false
 
       - name: Install dependencies
         run: npm install
@@ -36,7 +37,9 @@ jobs:
 
       - name: Commit updated zip
         run: |
-          if git diff --quiet -- release/taskManage-build.zip; then
+          git add release/taskManage-build.zip
+
+          if git diff --cached --quiet -- release/taskManage-build.zip; then
             echo "No changes in release/taskManage-build.zip"
             exit 0
           fi
@@ -44,6 +47,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add release/taskManage-build.zip
           git commit -m "chore: update release/taskManage-build.zip"
           git push
