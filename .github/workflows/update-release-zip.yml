@@ -1,9 +1,11 @@
-name: Publish release ZIP
+name: Update and publish release ZIP
 
 on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'release/taskManage-build.zip'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -12,7 +14,7 @@ permissions:
   contents: write
 
 jobs:
-  build-and-publish-release:
+  build-commit-and-publish-release:
     runs-on: ubuntu-latest
 
     steps:
@@ -34,6 +36,17 @@ jobs:
       - name: Read app version
         id: app_version
         run: echo "tag=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git commit -m "chore: update release/taskManage-build.zip"
+          git push
+
+      - name: Read app version
+        id: app_version
+        run: |
+          node -e "const p=require('./package.json'); console.log('tag=' + p.version)" >> "$GITHUB_OUTPUT"
 
       - name: Create or update GitHub Release
         uses: softprops/action-gh-release@v2
