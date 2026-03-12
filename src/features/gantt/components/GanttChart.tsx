@@ -55,6 +55,10 @@ const VIEW_RANGE_OPTIONS: ViewRangeOption[] = [
   { id: '2m', label: '2ヶ月', days: 62 },
   { id: '3m', label: '3ヶ月', days: 93 },
   { id: '6m', label: '6ヶ月', days: 186 },
+  { id: '1y', label: '1年', days: 372 },
+  { id: '15m', label: '1年3か月', days: 465 },
+  { id: '18m', label: '1年6か月', days: 558 },
+  { id: '2y', label: '2年', days: 744 },
 ];
 
 const PARENT_BAR_HEIGHT = 34;
@@ -220,7 +224,7 @@ function collectDescendantTaskIds(rootTaskId: string, childrenByParentId: Map<st
 export function GanttChart({ tasks }: GanttChartProps) {
   const layout = useMemo(() => calculateGanttLayout(tasks), [tasks]);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [selectedRangeId, setSelectedRangeId] = useState<string>('3m');
+  const [selectedRangeId, setSelectedRangeId] = useState<string>('6m');
   const [selectedStartDate, setSelectedStartDate] = useState<string>('');
   const [hideDoneTasks, setHideDoneTasks] = useState(false);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
@@ -283,7 +287,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
   useEffect(() => {
     if (!layout) return;
     if (!selectedStartDate) {
-      setSelectedStartDate(shiftDateLabel(getJstDateLabel(), -5));
+      setSelectedStartDate(shiftDateLabel(getJstDateLabel(), -21));
     }
   }, [layout, selectedStartDate]);
 
