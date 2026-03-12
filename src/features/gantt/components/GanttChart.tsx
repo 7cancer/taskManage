@@ -689,7 +689,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
                       textAlign: 'center',
                       fontWeight: 600,
                       padding: '4px 0 2px',
-                      borderLeft: month.startIndex === 0 ? 'none' : '2px solid #94a3b8',
+                      borderLeft: month.startIndex === 0 ? 'none' : '1px solid #cbd5e1',
                     }}
                   >
                     {month.label}
@@ -698,7 +698,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, borderTop: '1px solid #e2e8f0' }}>
                 {dayDates.map((date, index) => (
-                  <div key={index} style={{ textAlign: 'center', padding: '2px 0', borderLeft: index === 0 ? 'none' : `${monthBoundaryIndexSet.has(index) ? 2 : 1}px solid ${monthBoundaryIndexSet.has(index) ? '#94a3b8' : '#e2e8f0'}`, background: isTodayCell(date) ? '#fed7aa' : isHolidayCell(date) ? '#e5e7eb' : '#f8fafc', fontSize: 12 }}>
+                  <div key={index} style={{ textAlign: 'center', padding: '2px 0', borderLeft: index === 0 ? 'none' : `1px solid ${monthBoundaryIndexSet.has(index) ? '#cbd5e1' : '#e2e8f0'}`, background: isTodayCell(date) ? '#fed7aa' : isHolidayCell(date) ? '#e5e7eb' : '#f8fafc', fontSize: 12 }}>
                     {date.getDate()}
                   </div>
                 ))}
@@ -721,7 +721,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
                   borderTop: '1px solid #f1f5f9',
                 }}
               >
-                <GanttRowTree taskName={task.taskName} depth={depth} />
+                <GanttRowTree taskName={task.taskName} depth={depth} status={task.status} />
               </div>
             ))}
           </div>
@@ -805,7 +805,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
                           top: 0,
                           bottom: 0,
                           background: isTodayCell(date) ? '#ffedd5' : isHolidayCell(date) ? '#f3f4f6' : 'transparent',
-                          borderLeft: index === 0 ? 'none' : `${monthBoundaryIndexSet.has(index) ? 2 : 1}px solid ${monthBoundaryIndexSet.has(index) ? '#94a3b8' : '#e2e8f0'}`,
+                          borderLeft: index === 0 ? 'none' : `1px solid ${monthBoundaryIndexSet.has(index) ? '#cbd5e1' : '#e2e8f0'}`,
                           pointerEvents: 'none',
                         }}
                       />
@@ -820,7 +820,8 @@ export function GanttChart({ tasks }: GanttChartProps) {
                           top: 0,
                           bottom: 0,
                           background: highlight.color,
-                          opacity: 0.13,
+                          opacity: 0.08,
+                          clipPath: 'polygon(0 0, 100% 0, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
                         }}
                       />
                     ))}
