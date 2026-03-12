@@ -1,4 +1,4 @@
-import { TASK_STATUS_LABELS } from '../../../domain/task/constants';
+import { TASK_STATUS_COLORS, TASK_STATUS_LABELS } from '../../../domain/task/constants';
 import { TaskStatus } from '../../../domain/task/types';
 
 interface GanttRowTreeProps {
@@ -9,6 +9,7 @@ interface GanttRowTreeProps {
 
 export function GanttRowTree({ taskName, depth, status }: GanttRowTreeProps) {
   const statusLabel = TASK_STATUS_LABELS[status];
+  const statusColor = TASK_STATUS_COLORS[status];
 
   return (
     <div
@@ -22,11 +23,21 @@ export function GanttRowTree({ taskName, depth, status }: GanttRowTreeProps) {
         padding: '0 10px',
         paddingLeft: 10 + depth * 20,
         fontSize: 13,
-        background: depth > 0 ? '#f1f5f9' : 'transparent',
       }}
       title={taskName}
     >
-      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>
+      <span
+        style={{
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          minWidth: 0,
+          flex: 1,
+          background: depth > 0 ? '#f1f5f9' : 'transparent',
+          borderRadius: 4,
+          padding: depth > 0 ? '2px 6px' : 0,
+        }}
+      >
         {depth > 0 ? '└ ' : ''}
         {taskName}
       </span>
@@ -35,8 +46,8 @@ export function GanttRowTree({ taskName, depth, status }: GanttRowTreeProps) {
           flexShrink: 0,
           fontSize: 11,
           lineHeight: '16px',
-          color: '#334155',
-          background: '#e2e8f0',
+          color: '#ffffff',
+          background: statusColor,
           borderRadius: 999,
           padding: '1px 8px',
         }}
