@@ -230,6 +230,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const [timelineScrollLeft, setTimelineScrollLeft] = useState(0);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(0);
+  const animationFrameRef = useRef<number | null>(null);
   const ganttToolbarRef = useRef<HTMLDivElement | null>(null);
   const [ganttHeaderStickyTop, setGanttHeaderStickyTop] = useState(0);
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -322,16 +323,30 @@ export function GanttChart({ tasks }: GanttChartProps) {
     };
 
     updateViewport();
-    window.addEventListener('resize', updateViewport);
+
+    const resizeObserver = new ResizeObserver(updateViewport);
+    resizeObserver.observe(element);
 
     return () => {
-      window.removeEventListener('resize', updateViewport);
+      resizeObserver.disconnect();
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
     };
   }, [layout]);
 
   function handleTimelineScroll(event: UIEvent<HTMLDivElement>) {
-    setTimelineScrollLeft(event.currentTarget.scrollLeft);
-    setTimelineViewportWidth(event.currentTarget.clientWidth);
+    const element = event.currentTarget;
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
+    animationFrameRef.current = requestAnimationFrame(() => {
+      setTimelineScrollLeft(element.scrollLeft);
+      setTimelineViewportWidth(element.clientWidth);
+      animationFrameRef.current = null;
+    });
   }
 
   function handleBarMouseDown(event: MouseEvent<HTMLDivElement>, task: Task) {
@@ -491,6 +506,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
   const monthSpans = buildMonthSpans(viewStart, visibleDays);
   const monthBoundaryIndexSet = new Set(monthSpans.filter((month) => month.startIndex > 0).map((month) => month.startIndex));
   const visibleRows = currentLayout.rows.filter((row) => !hiddenTaskIdSet.has(row.task.taskId));
+  const effectiveTimelineViewportWidth = timelineViewportWidth || timelineScrollRef.current?.clientWidth || 0;
 
   function handleRangeChange(event: ChangeEvent<HTMLSelectElement>) {
     setSelectedRangeId(event.target.value);
@@ -867,14 +883,14 @@ export function GanttChart({ tasks }: GanttChartProps) {
                       const barLeft = barStartDay * DAY_COLUMN_WIDTH;
                       const barRight = barEndDayExclusive * DAY_COLUMN_WIDTH;
                       const viewLeft = timelineScrollLeft;
-                      const viewRight = timelineScrollLeft + timelineViewportWidth;
+                      const viewRight = timelineScrollLeft + effectiveTimelineViewportWidth;
 
                       const edgePadding = 8;
                       const top = GANTT_ROW_HEIGHT / 2 - 8;
 
                       if (barRight <= viewLeft) {
                         const labelLeft = viewLeft + edgePadding;
-                        const labelWidth = Math.max(timelineViewportWidth - edgePadding * 2, 20);
+                        const labelWidth = Math.max(effectiveTimelineViewportWidth - edgePadding * 2, 20);
 
                         return (
                           <div
@@ -897,7 +913,7 @@ export function GanttChart({ tasks }: GanttChartProps) {
                       }
 
                       if (barLeft >= viewRight) {
-                        const labelWidth = Math.max(timelineViewportWidth - edgePadding * 2, 20);
+                        const labelWidth = Math.max(effectiveTimelineViewportWidth - edgePadding * 2, 20);
                         const labelLeft = Math.max(viewRight - labelWidth - edgePadding, viewLeft + edgePadding);
 
                         return (
