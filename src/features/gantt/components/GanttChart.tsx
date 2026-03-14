@@ -1,4 +1,4 @@
-import { ChangeEvent, MouseEvent, UIEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, MouseEvent, UIEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TASK_STATUS_COLORS, TASK_STATUS_LABELS } from '../../../domain/task/constants';
 import { Task, TaskStatus } from '../../../domain/task/types';
 import { TaskFormValues, TaskModal } from '../../task-editor/components/TaskModal';
@@ -6,6 +6,8 @@ import { generateTaskId } from '../../../shared/lib/id';
 import { addTask, removeTasks, replaceTasks, updateTask, updateTasks } from '../../../store/actions/taskCrud';
 import { GanttContextMenu } from './GanttContextMenu';
 import { GanttRowTree } from './GanttRowTree';
+import { GanttGridBackground } from './GanttGridBackground';
+import { GanttTimelineRow } from './GanttTimelineRow';
 import { createTaskFromRightClick } from '../interactions/rightClickCreate';
 import { calculateGanttLayout, getDateOffsetDays } from '../lib/ganttLayout';
 
@@ -61,23 +63,9 @@ const VIEW_RANGE_OPTIONS: ViewRangeOption[] = [
   { id: '2y', label: '2年', days: 744 },
 ];
 
-const PARENT_BAR_HEIGHT = 34;
-const CHILD_BAR_HEIGHT = 28;
-const DESCENDANT_BAR_HEIGHT = 22;
 const GANTT_ROW_HEIGHT = 46;
 const GANTT_HEADER_HEIGHT = 50;
-
-function getBarHeight(depth: number): number {
-  if (depth <= 0) return PARENT_BAR_HEIGHT;
-  if (depth === 1) return CHILD_BAR_HEIGHT;
-  return DESCENDANT_BAR_HEIGHT;
-}
-
-function getBarOpacity(depth: number): number {
-  if (depth <= 0) return 0.62;
-  if (depth === 1) return 0.52;
-  return 0.42;
-}
+const VIRTUALIZATION_OVERSCAN = 5;
 
 function formatLabel(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -230,18 +218,37 @@ export function GanttChart({ tasks }: GanttChartProps) {
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const [timelineScrollLeft, setTimelineScrollLeft] = useState(0);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(0);
+  const animationFrameRef = useRef<number | null>(null);
   const ganttToolbarRef = useRef<HTMLDivElement | null>(null);
   const [ganttHeaderStickyTop, setGanttHeaderStickyTop] = useState(0);
-  const [dragState, setDragState] = useState<DragState | null>(null);
-  const [dragOffsetDays, setDragOffsetDays] = useState(0);
+
+  // Drag state: use ref for intermediate values, only setState on mouseup
+  const dragStateRef = useRef<DragState | null>(null);
   const dragOffsetDaysRef = useRef(0);
-  const [resizeState, setResizeState] = useState<ResizeState | null>(null);
-  const [resizeOffsetDays, setResizeOffsetDays] = useState(0);
+  const [dragVersion, setDragVersion] = useState(0); // trigger re-render only when drag starts/ends
+  const dragSnapshotRef = useRef<{ state: DragState | null; offsetDays: number }>({
+    state: null,
+    offsetDays: 0,
+  });
+
+  // Resize state: same ref-based approach
+  const resizeStateRef = useRef<ResizeState | null>(null);
   const resizeOffsetDaysRef = useRef(0);
+  const [resizeVersion, setResizeVersion] = useState(0);
+  const resizeSnapshotRef = useRef<{ state: ResizeState | null; offsetDays: number }>({
+    state: null,
+    offsetDays: 0,
+  });
+
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [taskForm, setTaskForm] = useState<TaskFormValues>(() => buildInitialTaskForm());
   const suppressNextBarClickRef = useRef(false);
+
+  // Vertical scroll for virtualization
+  const bodyScrollRef = useRef<HTMLDivElement | null>(null);
+  const [verticalScrollTop, setVerticalScrollTop] = useState(0);
+  const [bodyHeight, setBodyHeight] = useState(0);
 
   const selectedOption = VIEW_RANGE_OPTIONS.find((item) => item.id === selectedRangeId) ?? VIEW_RANGE_OPTIONS[1];
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.taskId, task])), [tasks]);
@@ -258,13 +265,6 @@ export function GanttChart({ tasks }: GanttChartProps) {
 
     return map;
   }, [tasks]);
-  const dragShiftByTaskId = useMemo(() => {
-    if (!dragState || dragOffsetDays === 0) {
-      return new Map<string, number>();
-    }
-
-    return new Map(dragState.affectedTaskIds.map((taskId) => [taskId, dragOffsetDays]));
-  }, [dragOffsetDays, dragState]);
 
   const hiddenTaskIdSet = useMemo(() => {
     if (!hideDoneTasks) {
@@ -311,7 +311,6 @@ export function GanttChart({ tasks }: GanttChartProps) {
     };
   }, []);
 
-
   useEffect(() => {
     const element = timelineScrollRef.current;
     if (!element) return;
@@ -322,78 +321,120 @@ export function GanttChart({ tasks }: GanttChartProps) {
     };
 
     updateViewport();
-    window.addEventListener('resize', updateViewport);
+
+    const resizeObserver = new ResizeObserver(updateViewport);
+    resizeObserver.observe(element);
 
     return () => {
-      window.removeEventListener('resize', updateViewport);
+      resizeObserver.disconnect();
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
     };
   }, [layout]);
 
-  function handleTimelineScroll(event: UIEvent<HTMLDivElement>) {
-    setTimelineScrollLeft(event.currentTarget.scrollLeft);
-    setTimelineViewportWidth(event.currentTarget.clientWidth);
-  }
+  // Vertical scroll tracking for virtualization
+  useEffect(() => {
+    const element = bodyScrollRef.current;
+    if (!element) return;
 
-  function handleBarMouseDown(event: MouseEvent<HTMLDivElement>, task: Task) {
-    event.preventDefault();
+    const updateScroll = () => {
+      setVerticalScrollTop(element.scrollTop);
+      setBodyHeight(element.clientHeight);
+    };
 
-    const descendantTaskIds = collectDescendantTaskIds(task.taskId, childrenByParentId);
-    setDragState({
-      taskId: task.taskId,
-      affectedTaskIds: [task.taskId, ...descendantTaskIds],
-      startClientX: event.clientX,
-    });
-    setDragOffsetDays(0);
-    dragOffsetDaysRef.current = 0;
-  }
+    updateScroll();
 
-  function handleResizeHandleMouseDown(event: MouseEvent<HTMLDivElement>, task: Task) {
-    event.preventDefault();
-    event.stopPropagation();
-    suppressNextBarClickRef.current = true;
+    const resizeObserver = new ResizeObserver(updateScroll);
+    resizeObserver.observe(element);
 
-    setResizeState({
-      taskId: task.taskId,
-      startClientX: event.clientX,
-      originalEndDate: task.endDate,
-    });
-    setResizeOffsetDays(0);
-    resizeOffsetDaysRef.current = 0;
-  }
+    const handleScroll = () => {
+      requestAnimationFrame(updateScroll);
+    };
 
-  function openEditModal(task: Task) {
-    if (suppressNextBarClickRef.current) {
-      suppressNextBarClickRef.current = false;
-      return;
+    element.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      element.removeEventListener('scroll', handleScroll);
+      resizeObserver.disconnect();
+    };
+  }, [layout]);
+
+  const handleTimelineScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    const element = event.currentTarget;
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
     }
 
-    setTaskForm(buildInitialTaskForm(task));
-    setEditingTaskId(task.taskId);
-    setIsCreateModalOpen(false);
-  }
+    animationFrameRef.current = requestAnimationFrame(() => {
+      setTimelineScrollLeft(element.scrollLeft);
+      setTimelineViewportWidth(element.clientWidth);
+      animationFrameRef.current = null;
+    });
+  }, []);
 
-  function openCreateModal() {
-    setTaskForm(buildInitialTaskForm());
-    setEditingTaskId(null);
-    setIsCreateModalOpen(true);
-  }
+  // Drag: ref-based with requestAnimationFrame for visual updates
+  const handleBarMouseDown = useCallback(
+    (event: MouseEvent<HTMLDivElement>, task: Task) => {
+      event.preventDefault();
 
-  function closeTaskModal() {
-    setEditingTaskId(null);
-    setIsCreateModalOpen(false);
-  }
+      const descendantTaskIds = collectDescendantTaskIds(task.taskId, childrenByParentId);
+      const newDragState: DragState = {
+        taskId: task.taskId,
+        affectedTaskIds: [task.taskId, ...descendantTaskIds],
+        startClientX: event.clientX,
+      };
+      dragStateRef.current = newDragState;
+      dragOffsetDaysRef.current = 0;
+      dragSnapshotRef.current = { state: newDragState, offsetDays: 0 };
+      setDragVersion((v) => v + 1);
+    },
+    [childrenByParentId],
+  );
 
+  const handleResizeHandleMouseDown = useCallback(
+    (event: MouseEvent<HTMLDivElement>, task: Task) => {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressNextBarClickRef.current = true;
+
+      const newResizeState: ResizeState = {
+        taskId: task.taskId,
+        startClientX: event.clientX,
+        originalEndDate: task.endDate,
+      };
+      resizeStateRef.current = newResizeState;
+      resizeOffsetDaysRef.current = 0;
+      resizeSnapshotRef.current = { state: newResizeState, offsetDays: 0 };
+      setResizeVersion((v) => v + 1);
+    },
+    [],
+  );
+
+  // Drag mousemove/mouseup: use refs and rAF to avoid per-frame re-renders
   useEffect(() => {
+    const dragState = dragStateRef.current;
     if (!dragState) return;
+
+    let rafId: number | null = null;
 
     const onMouseMove = (event: globalThis.MouseEvent) => {
       const diffX = event.clientX - dragState.startClientX;
       const nextOffsetDays = Math.round(diffX / DAY_COLUMN_WIDTH);
-      setDragOffsetDays(nextOffsetDays);
-      dragOffsetDaysRef.current = nextOffsetDays;
+      if (nextOffsetDays !== dragOffsetDaysRef.current) {
+        dragOffsetDaysRef.current = nextOffsetDays;
+        if (rafId !== null) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          dragSnapshotRef.current = { state: dragState, offsetDays: nextOffsetDays };
+          setDragVersion((v) => v + 1);
+          rafId = null;
+        });
+      }
     };
 
     const onMouseUp = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
       const finalOffsetDays = dragOffsetDaysRef.current;
 
       if (finalOffsetDays !== 0) {
@@ -416,9 +457,10 @@ export function GanttChart({ tasks }: GanttChartProps) {
         suppressNextBarClickRef.current = false;
       }, 0);
 
-      setDragState(null);
-      setDragOffsetDays(0);
+      dragStateRef.current = null;
       dragOffsetDaysRef.current = 0;
+      dragSnapshotRef.current = { state: null, offsetDays: 0 };
+      setDragVersion((v) => v + 1);
     };
 
     window.addEventListener('mousemove', onMouseMove);
@@ -427,20 +469,33 @@ export function GanttChart({ tasks }: GanttChartProps) {
     return () => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
+      if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [dragState, taskById]);
+  }, [dragVersion, taskById]);
 
+  // Resize mousemove/mouseup: same ref-based approach
   useEffect(() => {
+    const resizeState = resizeStateRef.current;
     if (!resizeState) return;
+
+    let rafId: number | null = null;
 
     const onMouseMove = (event: globalThis.MouseEvent) => {
       const diffX = event.clientX - resizeState.startClientX;
       const nextOffsetDays = Math.round(diffX / DAY_COLUMN_WIDTH);
-      setResizeOffsetDays(nextOffsetDays);
-      resizeOffsetDaysRef.current = nextOffsetDays;
+      if (nextOffsetDays !== resizeOffsetDaysRef.current) {
+        resizeOffsetDaysRef.current = nextOffsetDays;
+        if (rafId !== null) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          resizeSnapshotRef.current = { state: resizeState, offsetDays: nextOffsetDays };
+          setResizeVersion((v) => v + 1);
+          rafId = null;
+        });
+      }
     };
 
     const onMouseUp = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
       const task = taskById.get(resizeState.taskId);
       if (task) {
         const shiftedEndDate = shiftTaskDateText(resizeState.originalEndDate, resizeOffsetDaysRef.current);
@@ -458,9 +513,10 @@ export function GanttChart({ tasks }: GanttChartProps) {
         suppressNextBarClickRef.current = false;
       }, 0);
 
-      setResizeState(null);
-      setResizeOffsetDays(0);
+      resizeStateRef.current = null;
       resizeOffsetDaysRef.current = 0;
+      resizeSnapshotRef.current = { state: null, offsetDays: 0 };
+      setResizeVersion((v) => v + 1);
     };
 
     window.addEventListener('mousemove', onMouseMove);
@@ -469,10 +525,79 @@ export function GanttChart({ tasks }: GanttChartProps) {
     return () => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
+      if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [resizeState, taskById]);
+  }, [resizeVersion, taskById]);
 
-  if (!layout) {
+  const openEditModal = useCallback(
+    (task: Task) => {
+      if (suppressNextBarClickRef.current) {
+        suppressNextBarClickRef.current = false;
+        return;
+      }
+
+      setTaskForm(buildInitialTaskForm(task));
+      setEditingTaskId(task.taskId);
+      setIsCreateModalOpen(false);
+    },
+    [],
+  );
+
+  const openCreateModal = useCallback(() => {
+    setTaskForm(buildInitialTaskForm());
+    setEditingTaskId(null);
+    setIsCreateModalOpen(true);
+  }, []);
+
+  const closeTaskModal = useCallback(() => {
+    setEditingTaskId(null);
+    setIsCreateModalOpen(false);
+  }, []);
+
+  // Read drag/resize snapshots (these are updated via rAF)
+  // Use dragVersion/resizeVersion to ensure we read latest snapshot
+  void dragVersion;
+  void resizeVersion;
+  const currentDragSnapshot = dragSnapshotRef.current;
+  const currentResizeSnapshot = resizeSnapshotRef.current;
+
+  const dragShiftByTaskId = useMemo(() => {
+    if (!currentDragSnapshot.state || currentDragSnapshot.offsetDays === 0) {
+      return new Map<string, number>();
+    }
+    return new Map(currentDragSnapshot.state.affectedTaskIds.map((taskId) => [taskId, currentDragSnapshot.offsetDays]));
+  }, [currentDragSnapshot.state, currentDragSnapshot.offsetDays]);
+
+  // Derive layout-dependent values (safe even when layout is null)
+  const currentLayout = layout;
+  const selectedStartTimestamp = Date.parse(selectedStartDate);
+  const viewStart = useMemo(() => {
+    if (!currentLayout) return new Date();
+    return Number.isNaN(selectedStartTimestamp) ? currentLayout.minStart : new Date(selectedStartTimestamp);
+  }, [currentLayout, selectedStartTimestamp]);
+  const visibleDays = currentLayout ? Math.min(selectedOption.days, currentLayout.totalDays) : 0;
+
+  const handleTimelineRowContextMenu = useCallback(
+    (event: MouseEvent<HTMLDivElement>, parentTaskId: string) => {
+      event.preventDefault();
+
+      const rect = event.currentTarget.getBoundingClientRect();
+      const safeWidth = rect.width || 1;
+      const relativeX = Math.min(Math.max(event.clientX - rect.left, 0), safeWidth);
+      const clickedOffsetDays = Math.floor((relativeX / safeWidth) * visibleDays);
+      const clickedDate = addDays(viewStart, clickedOffsetDays);
+
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        clickedDate,
+        parentTaskId,
+      });
+    },
+    [visibleDays, viewStart],
+  );
+
+  if (!currentLayout) {
     return (
       <section style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8 }}>
         <h2 style={{ margin: '0 0 8px' }}>ガントチャート</h2>
@@ -481,16 +606,76 @@ export function GanttChart({ tasks }: GanttChartProps) {
     );
   }
 
-  const currentLayout = layout;
-  const selectedStartTimestamp = Date.parse(selectedStartDate);
-  const viewStart = Number.isNaN(selectedStartTimestamp) ? currentLayout.minStart : new Date(selectedStartTimestamp);
-  const visibleDays = Math.min(selectedOption.days, currentLayout.totalDays);
   const viewEnd = addDays(viewStart, visibleDays - 1);
   const timelineWidth = visibleDays * DAY_COLUMN_WIDTH;
   const dayDates = Array.from({ length: visibleDays }, (_, index) => addDays(viewStart, index));
   const monthSpans = buildMonthSpans(viewStart, visibleDays);
   const monthBoundaryIndexSet = new Set(monthSpans.filter((month) => month.startIndex > 0).map((month) => month.startIndex));
   const visibleRows = currentLayout.rows.filter((row) => !hiddenTaskIdSet.has(row.task.taskId));
+  const effectiveTimelineViewportWidth = timelineViewportWidth || timelineScrollRef.current?.clientWidth || 0;
+
+  // Virtualization: compute visible row range
+  const totalContentHeight = visibleRows.length * GANTT_ROW_HEIGHT;
+  const firstVisibleRow = Math.max(0, Math.floor(verticalScrollTop / GANTT_ROW_HEIGHT) - VIRTUALIZATION_OVERSCAN);
+  const lastVisibleRow = Math.min(
+    visibleRows.length - 1,
+    Math.ceil((verticalScrollTop + bodyHeight) / GANTT_ROW_HEIGHT) + VIRTUALIZATION_OVERSCAN,
+  );
+
+  // Pre-compute ancestor highlights for visible rows
+  const computeAncestorHighlights = (task: Task): Array<{ left: number; width: number; color: string }> => {
+    const highlights: Array<{ left: number; width: number; color: string }> = [];
+
+    if (parentTaskIdSet.has(task.taskId)) {
+      const dragShift = dragShiftByTaskId.get(task.taskId) ?? 0;
+      const isResizingThis = currentResizeSnapshot.state?.taskId === task.taskId;
+      const effectiveStart = dragShift !== 0 ? new Date(shiftTaskDateText(task.startDate, dragShift)) : new Date(task.startDate);
+      const effectiveEndText = isResizingThis
+        ? shiftTaskDateText(task.endDate, currentResizeSnapshot.offsetDays)
+        : dragShift !== 0
+          ? shiftTaskDateText(task.endDate, dragShift)
+          : task.endDate;
+      const effectiveEnd = new Date(effectiveEndText);
+
+      const startDay = clamp(getDateOffsetDays(viewStart, effectiveStart), 0, visibleDays);
+      const endDay = clamp(getDateOffsetDays(viewStart, effectiveEnd) + 1, 0, visibleDays);
+      const dur = Math.max(endDay - startDay, 0);
+      if (dur > 0) {
+        highlights.push({
+          left: startDay * DAY_COLUMN_WIDTH,
+          width: dur * DAY_COLUMN_WIDTH,
+          color: BAR_COLORS[task.status],
+        });
+      }
+    }
+
+    let currentParentId = task.parentTaskId;
+    while (currentParentId) {
+      const parentTask = taskById.get(currentParentId);
+      if (!parentTask) break;
+
+      const parentDragShift = dragShiftByTaskId.get(parentTask.taskId) ?? 0;
+      const parentStart = new Date(shiftTaskDateText(parentTask.startDate, parentDragShift));
+      const parentEnd = new Date(shiftTaskDateText(parentTask.endDate, parentDragShift));
+      if (!Number.isNaN(parentStart.getTime()) && !Number.isNaN(parentEnd.getTime()) && parentEnd >= parentStart) {
+        const parentStartDay = clamp(getDateOffsetDays(viewStart, parentStart), 0, visibleDays);
+        const parentEndDay = clamp(getDateOffsetDays(viewStart, parentEnd) + 1, 0, visibleDays);
+        const parentDuration = Math.max(parentEndDay - parentStartDay, 0);
+
+        if (parentDuration > 0) {
+          highlights.push({
+            left: parentStartDay * DAY_COLUMN_WIDTH,
+            width: parentDuration * DAY_COLUMN_WIDTH,
+            color: BAR_COLORS[parentTask.status],
+          });
+        }
+      }
+
+      currentParentId = parentTask.parentTaskId;
+    }
+
+    return highlights;
+  };
 
   function handleRangeChange(event: ChangeEvent<HTMLSelectElement>) {
     setSelectedRangeId(event.target.value);
@@ -596,7 +781,6 @@ export function GanttChart({ tasks }: GanttChartProps) {
     closeTaskModal();
   }
 
-
   function handleDeleteTask() {
     if (!editingTaskId) return;
 
@@ -613,6 +797,62 @@ export function GanttChart({ tasks }: GanttChartProps) {
     });
 
     replaceTasks(sorted.map((task, index) => ({ ...task, displayOrder: index + 1 })));
+  }
+
+  // Build the visible rows slice for virtualization
+  const virtualizedRowsLeft: React.ReactNode[] = [];
+  const virtualizedRowsRight: React.ReactNode[] = [];
+
+  for (let i = firstVisibleRow; i <= lastVisibleRow && i < visibleRows.length; i++) {
+    const { task, depth, start } = visibleRows[i];
+    const dragShift = dragShiftByTaskId.get(task.taskId) ?? 0;
+    const isDragging = currentDragSnapshot.state?.affectedTaskIds.includes(task.taskId) ?? false;
+    const isResizing = currentResizeSnapshot.state?.taskId === task.taskId;
+    const resizeOffset = isResizing ? currentResizeSnapshot.offsetDays : 0;
+
+    virtualizedRowsLeft.push(
+      <div
+        key={task.taskId}
+        onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}
+        style={{
+          position: 'absolute',
+          top: i * GANTT_ROW_HEIGHT,
+          left: 0,
+          right: 0,
+          display: 'flex',
+          alignItems: 'center',
+          height: GANTT_ROW_HEIGHT,
+          boxSizing: 'border-box',
+          borderTop: '1px solid #f1f5f9',
+        }}
+      >
+        <GanttRowTree taskName={task.taskName} depth={depth} status={task.status} />
+      </div>,
+    );
+
+    virtualizedRowsRight.push(
+      <GanttTimelineRow
+        key={task.taskId}
+        task={task}
+        depth={depth}
+        start={start}
+        viewStart={viewStart}
+        visibleDays={visibleDays}
+        dragShift={dragShift}
+        isDragging={isDragging}
+        resizeOffsetDays={resizeOffset}
+        isResizing={isResizing}
+        isParentTask={parentTaskIdSet.has(task.taskId)}
+        ancestorHighlights={computeAncestorHighlights(task)}
+        rowIndex={i}
+        timelineScrollLeft={timelineScrollLeft}
+        timelineViewportWidth={effectiveTimelineViewportWidth}
+        onBarMouseDown={handleBarMouseDown}
+        onResizeMouseDown={handleResizeHandleMouseDown}
+        onBarClick={openEditModal}
+        onContextMenu={handleTimelineRowContextMenu}
+      />,
+    );
   }
 
   return (
@@ -711,258 +951,39 @@ export function GanttChart({ tasks }: GanttChartProps) {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)` }}>
-          <div>
-            {visibleRows.map(({ task, depth }) => (
-              <div
-                key={`${task.taskId}-left`}
-                onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  height: GANTT_ROW_HEIGHT,
-                  boxSizing: 'border-box',
-                  borderTop: '1px solid #f1f5f9',
-                }}
-              >
-                <GanttRowTree taskName={task.taskName} depth={depth} status={task.status} />
-              </div>
-            ))}
+        <div
+          ref={bodyScrollRef}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)`,
+            maxHeight: '70vh',
+            overflowY: 'auto',
+          }}
+          onScroll={(event) => {
+            setVerticalScrollTop(event.currentTarget.scrollTop);
+          }}
+        >
+          <div style={{ position: 'relative', height: totalContentHeight }}>
+            {virtualizedRowsLeft}
           </div>
 
           <div ref={timelineScrollRef} onScroll={handleTimelineScroll} style={{ overflowX: 'auto' }}>
-            <div style={{ width: timelineWidth }}>
-              {visibleRows.map(({ task, start, depth }) => {
-                const currentDragShift = dragShiftByTaskId.get(task.taskId) ?? 0;
-                const isDraggingThisTask = dragState?.affectedTaskIds.includes(task.taskId) ?? false;
-                const isResizingThisTask = resizeState?.taskId === task.taskId;
-                const effectiveStart = currentDragShift !== 0 ? new Date(shiftTaskDateText(task.startDate, currentDragShift)) : start;
-                const effectiveEndDateText = isResizingThisTask
-                  ? shiftTaskDateText(task.endDate, resizeOffsetDays)
-                  : currentDragShift !== 0
-                    ? shiftTaskDateText(task.endDate, currentDragShift)
-                    : task.endDate;
-                const effectiveEnd = new Date(effectiveEndDateText);
-
-                const startOffsetDays = getDateOffsetDays(viewStart, effectiveStart);
-                const endOffsetDays = getDateOffsetDays(viewStart, effectiveEnd);
-
-                const visibleStartDay = clamp(startOffsetDays, 0, visibleDays);
-                const visibleEndDay = clamp(endOffsetDays + 1, 0, visibleDays);
-                const visibleDurationDays = Math.max(visibleEndDay - visibleStartDay, 0);
-
-                const ancestorHighlights: Array<{ left: number; width: number; color: string }> = [];
-
-                if (parentTaskIdSet.has(task.taskId)) {
-                  if (visibleDurationDays > 0) {
-                    ancestorHighlights.push({
-                      left: visibleStartDay * DAY_COLUMN_WIDTH,
-                      width: visibleDurationDays * DAY_COLUMN_WIDTH,
-                      color: BAR_COLORS[task.status],
-                    });
-                  }
-                }
-
-                let currentParentId = task.parentTaskId;
-                while (currentParentId) {
-                  const parentTask = taskById.get(currentParentId);
-                  if (!parentTask) break;
-
-                  const parentDragShift = dragShiftByTaskId.get(parentTask.taskId) ?? 0;
-                  const parentStart = new Date(shiftTaskDateText(parentTask.startDate, parentDragShift));
-                  const parentEnd = new Date(shiftTaskDateText(parentTask.endDate, parentDragShift));
-                  if (!Number.isNaN(parentStart.getTime()) && !Number.isNaN(parentEnd.getTime()) && parentEnd >= parentStart) {
-                    const parentStartDay = clamp(getDateOffsetDays(viewStart, parentStart), 0, visibleDays);
-                    const parentEndDay = clamp(getDateOffsetDays(viewStart, parentEnd) + 1, 0, visibleDays);
-                    const parentDuration = Math.max(parentEndDay - parentStartDay, 0);
-
-                    if (parentDuration > 0) {
-                      ancestorHighlights.push({
-                        left: parentStartDay * DAY_COLUMN_WIDTH,
-                        width: parentDuration * DAY_COLUMN_WIDTH,
-                        color: BAR_COLORS[parentTask.status],
-                      });
-                    }
-                  }
-
-                  currentParentId = parentTask.parentTaskId;
-                }
-
-                return (
-                  <div
-                    key={`${task.taskId}-right`}
-                    onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}
-                    style={{
-                      position: 'relative',
-                      height: GANTT_ROW_HEIGHT,
-                      boxSizing: 'border-box',
-                      borderTop: '1px solid #f1f5f9',
-                                          }}
-                  >
-                    {dayDates.map((date, index) => (
-                      <div
-                        key={`${task.taskId}-day-bg-${index}`}
-                        style={{
-                          position: 'absolute',
-                          left: index * DAY_COLUMN_WIDTH,
-                          width: DAY_COLUMN_WIDTH,
-                          top: 0,
-                          bottom: 0,
-                          background: isTodayCell(date) ? '#ffedd5' : isHolidayCell(date) ? '#f3f4f6' : 'transparent',
-                          borderLeft: index === 0 ? 'none' : `1px solid ${monthBoundaryIndexSet.has(index) ? '#cbd5e1' : '#e2e8f0'}`,
-                          pointerEvents: 'none',
-                        }}
-                      />
-                    ))}
-                    {ancestorHighlights.map((highlight, index) => (
-                      <div
-                        key={`${task.taskId}-ancestor-${index}`}
-                        style={{
-                          position: 'absolute',
-                          left: highlight.left,
-                          width: highlight.width,
-                          top: 0,
-                          bottom: 0,
-                          background: highlight.color,
-                          opacity: 0.08,
-                          clipPath: 'polygon(0 0, 100% 0, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
-                        }}
-                      />
-                    ))}
-                    {visibleDurationDays > 0 && (
-                      <div
-                        title={`taskId: ${task.taskId} | ${isDraggingThisTask ? shiftTaskDateText(task.startDate, currentDragShift) : task.startDate} - ${isDraggingThisTask ? shiftTaskDateText(task.endDate, currentDragShift) : task.endDate}`}
-                        style={{
-                          position: 'absolute',
-                          left: visibleStartDay * DAY_COLUMN_WIDTH,
-                          width: visibleDurationDays * DAY_COLUMN_WIDTH,
-                          minWidth: 8,
-                          height: getBarHeight(depth),
-                          top: GANTT_ROW_HEIGHT / 2 - getBarHeight(depth) / 2,
-                          borderRadius: 2,
-                          background: BAR_COLORS[task.status],
-                          opacity: getBarOpacity(depth),
-                          cursor: isDraggingThisTask ? 'grabbing' : 'grab',
-                        }}
-                        onClick={() => openEditModal(task)}
-                        onMouseDown={(event) => handleBarMouseDown(event, task)}
-                      >
-                        <div
-                          style={{
-                            position: 'absolute',
-                            right: 0,
-                            top: 0,
-                            width: 8,
-                            height: '100%',
-                            background: 'rgba(15, 23, 42, 0.4)',
-                            cursor: 'ew-resize',
-                          }}
-                          onMouseDown={(event) => handleResizeHandleMouseDown(event, task)}
-                        />
-                      </div>
-                    )}
-                    {(() => {
-                      const barStartDay = startOffsetDays;
-                      const barEndDayExclusive = endOffsetDays + 1;
-                      const barLeft = barStartDay * DAY_COLUMN_WIDTH;
-                      const barRight = barEndDayExclusive * DAY_COLUMN_WIDTH;
-                      const viewLeft = timelineScrollLeft;
-                      const viewRight = timelineScrollLeft + timelineViewportWidth;
-
-                      const edgePadding = 8;
-                      const top = GANTT_ROW_HEIGHT / 2 - 8;
-
-                      if (barRight <= viewLeft) {
-                        const labelLeft = viewLeft + edgePadding;
-                        const labelWidth = Math.max(timelineViewportWidth - edgePadding * 2, 20);
-
-                        return (
-                          <div
-                            style={{
-                              position: 'absolute',
-                              left: labelLeft,
-                              width: labelWidth,
-                              top,
-                              fontSize: 12,
-                              lineHeight: '16px',
-                              color: '#0f172a',
-                              whiteSpace: 'nowrap',
-                              pointerEvents: 'none',
-                            }}
-                            title={task.taskName}
-                          >
-                            {task.taskName}
-                          </div>
-                        );
-                      }
-
-                      if (barLeft >= viewRight) {
-                        const labelWidth = Math.max(timelineViewportWidth - edgePadding * 2, 20);
-                        const labelLeft = Math.max(viewRight - labelWidth - edgePadding, viewLeft + edgePadding);
-
-                        return (
-                          <div
-                            style={{
-                              position: 'absolute',
-                              left: labelLeft,
-                              width: labelWidth,
-                              top,
-                              fontSize: 12,
-                              lineHeight: '16px',
-                              color: '#0f172a',
-                              whiteSpace: 'nowrap',
-                              textAlign: 'right',
-                              pointerEvents: 'none',
-                            }}
-                            title={task.taskName}
-                          >
-                            {task.taskName}
-                          </div>
-                        );
-                      }
-
-                      const visibleBarLeft = Math.max(barLeft, viewLeft);
-                      const labelLeft = Math.max(visibleBarLeft + edgePadding, viewLeft + edgePadding);
-                      const labelMaxRight = viewRight - 6;
-                      const labelWidth = labelMaxRight - labelLeft;
-
-                      if (labelWidth <= 12) {
-                        return null;
-                      }
-
-                      return (
-                        <div
-                          style={{
-                            position: 'absolute',
-                            left: labelLeft,
-                            width: labelWidth,
-                            top,
-                            fontSize: 12,
-                            lineHeight: '16px',
-                            color: '#0f172a',
-                            whiteSpace: 'nowrap',
-                            pointerEvents: 'none',
-                          }}
-                          title={task.taskName}
-                        >
-                          {task.taskName}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                );
-              })}
-              </div>
+            <div style={{ width: timelineWidth, position: 'relative', height: totalContentHeight }}>
+              <GanttGridBackground
+                visibleDays={visibleDays}
+                dayColumnWidth={DAY_COLUMN_WIDTH}
+                rowCount={visibleRows.length}
+                rowHeight={GANTT_ROW_HEIGHT}
+                dayDates={dayDates}
+                monthBoundaryIndexSet={monthBoundaryIndexSet}
+                isTodayCell={isTodayCell}
+                isHolidayCell={isHolidayCell}
+              />
+              {virtualizedRowsRight}
             </div>
           </div>
         </div>
-
-
-
-
-
-
-
+      </div>
 
       {contextMenu && (
         <GanttContextMenu x={contextMenu.x} y={contextMenu.y} onCreateTask={handleCreateTask} onClose={() => setContextMenu(null)} />

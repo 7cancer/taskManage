@@ -6,3 +6,7 @@ dist/
 
 release/*
 !release/taskManage-build.zip
+
+# TypeScript build output
+tsconfig.tsbuildinfo
+src/**/*.js

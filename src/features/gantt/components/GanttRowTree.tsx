@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { TASK_STATUS_COLORS, TASK_STATUS_LABELS } from '../../../domain/task/constants';
 import { TaskStatus } from '../../../domain/task/types';
 
@@ -7,7 +8,7 @@ interface GanttRowTreeProps {
   status: TaskStatus;
 }
 
-export function GanttRowTree({ taskName, depth, status }: GanttRowTreeProps) {
+export const GanttRowTree = memo(function GanttRowTree({ taskName, depth, status }: GanttRowTreeProps) {
   const statusLabel = TASK_STATUS_LABELS[status];
   const statusColor = TASK_STATUS_COLORS[status];
 
@@ -38,7 +39,7 @@ export function GanttRowTree({ taskName, depth, status }: GanttRowTreeProps) {
           padding: depth > 0 ? '2px 6px' : 0,
         }}
       >
-        {depth > 0 ? '└ ' : ''}
+        {depth > 0 ? '\u2514 ' : ''}
         {taskName}
       </span>
       <span
@@ -56,4 +57,4 @@ export function GanttRowTree({ taskName, depth, status }: GanttRowTreeProps) {
       </span>
     </div>
   );
-}
+});
