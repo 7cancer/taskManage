@@ -51,15 +51,32 @@ jobs:
           git commit -m "chore: update release/taskManage-build.zip"
           git push
 
-      - name: Read app version
-        id: app_version
+      - name: Determine next version tag
+        id: next_version
         run: |
-          node -e "const p=require('./package.json'); console.log('tag=' + p.version)" >> "$GITHUB_OUTPUT"
+          git fetch --tags
+          # Get the latest tag sorted by version number
+          LATEST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -n 1)
+          if [ -z "$LATEST_TAG" ]; then
+            # No existing tags — start from package.json version
+            BASE_VERSION=$(node -e "const p=require('./package.json'); console.log(p.version)")
+            NEXT_TAG="v${BASE_VERSION}"
+          else
+            # Increment patch version
+            VERSION="${LATEST_TAG#v}"
+            MAJOR=$(echo "$VERSION" | cut -d. -f1)
+            MINOR=$(echo "$VERSION" | cut -d. -f2)
+            PATCH=$(echo "$VERSION" | cut -d. -f3)
+            NEXT_PATCH=$((PATCH + 1))
+            NEXT_TAG="v${MAJOR}.${MINOR}.${NEXT_PATCH}"
+          fi
+          echo "tag=${NEXT_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Next release tag: ${NEXT_TAG}"
 
-      - name: Create or update GitHub Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.app_version.outputs.tag }}
-          name: ${{ steps.app_version.outputs.tag }}
+          tag_name: ${{ steps.next_version.outputs.tag }}
+          name: Release ${{ steps.next_version.outputs.tag }}
           files: release/taskManage-build.zip
           fail_on_unmatched_files: true
