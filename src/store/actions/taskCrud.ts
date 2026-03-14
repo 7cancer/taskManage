@@ -2,39 +2,38 @@ import { Task } from '../../domain/task/types';
 import { saveTasksToCsvStorage } from './taskPersistence';
 import { useTaskStore } from '../taskStore';
 
-function commitTasks(nextTasks: Task[]) {
-  useTaskStore.getState().setTasks(nextTasks);
-  saveTasksToCsvStorage(nextTasks);
+function commitFromStoreSnapshot() {
+  const latestTasks = useTaskStore.getState().tasks;
+  saveTasksToCsvStorage(latestTasks);
 }
 
 export function addTask(task: Task) {
   // TODO: 重複IDチェックを追加する。
-  const current = useTaskStore.getState().tasks;
-  commitTasks([...current, task]);
+  useTaskStore.getState().upsertTasks([task]);
+  commitFromStoreSnapshot();
 }
 
 export function updateTask(task: Task) {
-  const current = useTaskStore.getState().tasks;
-  commitTasks(current.map((item) => (item.taskId === task.taskId ? task : item)));
+  useTaskStore.getState().upsertTasks([task]);
+  commitFromStoreSnapshot();
 }
 
 export function updateTasks(tasks: Task[]) {
-  const updateMap = new Map(tasks.map((task) => [task.taskId, task]));
-  const current = useTaskStore.getState().tasks;
-  commitTasks(current.map((item) => updateMap.get(item.taskId) ?? item));
+  useTaskStore.getState().upsertTasks(tasks);
+  commitFromStoreSnapshot();
 }
 
 export function removeTask(taskId: string) {
-  const current = useTaskStore.getState().tasks;
-  commitTasks(current.filter((item) => item.taskId !== taskId));
+  useTaskStore.getState().removeTasksById([taskId]);
+  commitFromStoreSnapshot();
 }
 
 export function removeTasks(taskIds: string[]) {
-  const removeIdSet = new Set(taskIds);
-  const current = useTaskStore.getState().tasks;
-  commitTasks(current.filter((item) => !removeIdSet.has(item.taskId)));
+  useTaskStore.getState().removeTasksById(taskIds);
+  commitFromStoreSnapshot();
 }
 
 export function replaceTasks(tasks: Task[]) {
-  commitTasks(tasks);
+  useTaskStore.getState().setTasks(tasks);
+  saveTasksToCsvStorage(tasks);
 }
