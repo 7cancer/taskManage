@@ -3,8 +3,8 @@ import { saveTasksToCsvStorage } from './taskPersistence';
 import { useTaskStore } from '../taskStore';
 
 function commitFromStoreSnapshot() {
-  const latestTasks = useTaskStore.getState().tasks;
-  saveTasksToCsvStorage(latestTasks);
+  const { tasks, meta } = useTaskStore.getState();
+  saveTasksToCsvStorage(tasks, meta);
 }
 
 export function addTask(task: Task) {
@@ -35,5 +35,6 @@ export function removeTasks(taskIds: string[]) {
 
 export function replaceTasks(tasks: Task[]) {
   useTaskStore.getState().setTasks(tasks);
-  saveTasksToCsvStorage(tasks);
+  const { meta } = useTaskStore.getState();
+  saveTasksToCsvStorage(tasks, meta);
 }
