@@ -3,6 +3,7 @@ import { TaskMeta } from '../../../domain/task/meta';
 import { importTasksFromCsvText } from '../../../store/actions/taskImport';
 import { CsvFileHandle, persistTasksToCsvFile, serializeTasksToCsv, setCsvExportFileHandle } from '../../../store/actions/taskPersistence';
 import { useTaskStore } from '../../../store/taskStore';
+import { Button } from '../../../shared/ui/Button';
 
 interface CsvPreviewState {
   fileName: string;
@@ -90,7 +91,7 @@ export function CsvImportDialog() {
   const summaryText = useMemo(() => {
     if (!preview) return '';
 
-    return `読込候補: ${preview.fileName} / ${preview.rowCount}行`;
+    return `${preview.fileName} / ${preview.rowCount}行`;
   }, [preview]);
 
   function applyImportedCsv(text: string, fileName: string) {
@@ -124,7 +125,7 @@ export function CsvImportDialog() {
     });
 
     if (importResult.errors.length > 0) {
-      setErrorMessage(`取込時に ${importResult.errors.length} 件のエラーがありました（正常データ ${importResult.validTasks.length} 件を反映）。`);
+      setErrorMessage(`${importResult.errors.length} 件のエラー（正常 ${importResult.validTasks.length} 件を反映）`);
     }
   }
 
@@ -139,7 +140,7 @@ export function CsvImportDialog() {
       applyImportedCsv(text, file.name);
     } catch (error) {
       setPreview(null);
-      setErrorMessage(`CSVの読込中にエラーが発生しました: ${(error as Error).message}`);
+      setErrorMessage(`読込エラー: ${(error as Error).message}`);
     } finally {
       event.target.value = '';
     }
@@ -168,9 +169,9 @@ export function CsvImportDialog() {
       applyImportedCsv(text, file.name);
 
       setCsvExportFileHandle(fileHandle);
-      setSaveMessage('読込ファイルを保存先CSVとして設定しました。');
+      setSaveMessage('保存先CSVを設定しました。');
     } catch (error) {
-      setErrorMessage(`CSVの選択に失敗しました: ${(error as Error).message}`);
+      setErrorMessage(`CSV選択失敗: ${(error as Error).message}`);
     }
   }
 
@@ -201,7 +202,7 @@ export function CsvImportDialog() {
       setCsvExportFileHandle(fileHandle);
       await persistTasksToCsvFile(tasks, latestMeta);
     } catch (error) {
-      setErrorMessage(`CSVエクスポートに失敗しました: ${(error as Error).message}`);
+      setErrorMessage(`エクスポート失敗: ${(error as Error).message}`);
     }
   }
 
@@ -214,80 +215,54 @@ export function CsvImportDialog() {
       const latestMeta = currentMeta();
       const saved = await persistTasksToCsvFile(tasks, latestMeta);
       if (!saved) {
-        setErrorMessage('「ファイルを選択」または「CSVへのエクスポート」で保存先CSVファイルを選択してください。');
+        setErrorMessage('先にCSVファイルを選択してください。');
         return;
       }
 
-      setSaveMessage('CSVファイルへ保存しました。');
+      setSaveMessage('保存しました。');
     } catch (error) {
-      setErrorMessage(`Saveに失敗しました: ${(error as Error).message}`);
+      setErrorMessage(`保存失敗: ${(error as Error).message}`);
     }
   }
 
   return (
-    <section style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8 }}>
-      <h2 style={{ marginTop: 0 }}>CSV取込（最小実装）</h2>
-      <button type="button" onClick={handleSelectCsv}>ファイルを選択</button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <Button variant="secondary" size="sm" onClick={handleSelectCsv} style={{ width: '100%' }}>
+        ファイルを選択
+      </Button>
       <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleFileChange} style={{ display: 'none' }} />
 
-
       {preview && (
-        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
-          <button type="button" onClick={handleExportToCsv}>
-            CSVへのエクスポート
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            style={{
-              padding: '12px 28px',
-              fontSize: 18,
-              fontWeight: 700,
-              background: '#16a34a',
-              color: '#fff',
-              border: '1px solid #15803d',
-              borderRadius: 8,
-              cursor: 'pointer',
-            }}
-          >
+        <>
+          <Button variant="secondary" size="sm" onClick={handleExportToCsv} style={{ width: '100%' }}>
+            CSVエクスポート
+          </Button>
+          <Button variant="primary" size="sm" onClick={handleSave} style={{ width: '100%' }}>
             Save
-          </button>
-        </div>
+          </Button>
+        </>
       )}
 
       {saveMessage && (
-        <p style={{ color: '#166534', marginTop: 8 }} role="status">
+        <p style={{ color: '#166534', margin: 0, fontSize: 12 }} role="status">
           {saveMessage}
         </p>
       )}
 
       {errorMessage && (
-        <p style={{ color: '#b91c1c', marginTop: 8 }} role="alert">
+        <p style={{ color: '#b91c1c', margin: 0, fontSize: 12 }} role="alert">
           {errorMessage}
         </p>
       )}
 
       {preview && (
-        <div style={{ marginTop: 12 }}>
-          <p style={{ margin: '4px 0' }}>{summaryText}</p>
-          <p style={{ margin: '4px 0' }}>
-            取込結果: <strong>{preview.importedCount}</strong>件成功 / <strong>{preview.errorCount}</strong>件エラー
+        <div style={{ fontSize: 12, color: '#475569' }}>
+          <p style={{ margin: '2px 0' }}>{summaryText}</p>
+          <p style={{ margin: '2px 0' }}>
+            {preview.importedCount}件成功 / {preview.errorCount}件エラー
           </p>
-          <p style={{ margin: '4px 0' }}>
-            ヘッダー: <code>{preview.header.join(' | ')}</code>
-          </p>
-          {preview.firstRow && (
-            <p style={{ margin: '4px 0' }}>
-              先頭データ行: <code>{preview.firstRow.join(' | ')}</code>
-            </p>
-          )}
-          <details style={{ marginTop: 8 }}>
-            <summary>先頭200文字を表示</summary>
-            <pre style={{ whiteSpace: 'pre-wrap' }}>{preview.rawHead}</pre>
-          </details>
         </div>
       )}
-
-    </section>
+    </div>
   );
 }

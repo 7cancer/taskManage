@@ -2,6 +2,7 @@ import { ChangeEvent, useMemo, useState } from 'react';
 import { TASK_STATUS_COLORS, TASK_STATUS_LABELS, TASK_STATUS_ORDER } from '../../../domain/task/constants';
 import { Task, TaskStatus } from '../../../domain/task/types';
 import { Modal } from '../../../shared/ui/Modal';
+import { Button } from '../../../shared/ui/Button';
 import { TaskDeleteConfirm } from './TaskDeleteConfirm';
 
 export interface TaskFormValues {
@@ -130,28 +131,16 @@ export function TaskModal({ mode, values, editingTask, onChange, onSave, onClose
             <div style={{ marginTop: 18, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
               <div>
                 {mode === 'edit' && onDelete && !confirmDelete && (
-                  <button type="button" onClick={() => setConfirmDelete(true)} style={{ color: '#b91c1c' }}>
+                  <Button variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>
                     タスク削除
-                  </button>
+                  </Button>
                 )}
               </div>
               <div style={{ display: 'inline-flex', gap: 8 }}>
-                <button type="button" onClick={onClose} style={{ minWidth: 120 }}>キャンセル</button>
-                <button
-                  type="button"
-                  onClick={onSave}
-                  disabled={!canSave}
-                  style={{
-                    minWidth: 120,
-                    background: canSave ? '#16a34a' : '#94a3b8',
-                    color: '#fff',
-                    border: `1px solid ${canSave ? '#15803d' : '#64748b'}`,
-                    cursor: canSave ? 'pointer' : 'not-allowed',
-                    opacity: canSave ? 1 : 0.9,
-                  }}
-                >
+                <Button variant="secondary" onClick={onClose} style={{ minWidth: 120 }}>キャンセル</Button>
+                <Button variant="primary" onClick={onSave} disabled={!canSave} style={{ minWidth: 120 }}>
                   保存
-                </button>
+                </Button>
               </div>
             </div>
             {mode === 'edit' && onDelete && confirmDelete && editingTask && (

@@ -3,14 +3,16 @@ import { TASK_STATUS_LABELS, TASK_STATUS_ORDER } from '../../domain/task/constan
 import { Task, TaskStatus } from '../../domain/task/types';
 import { CsvImportDialog } from '../../features/csv-import/components/CsvImportDialog';
 import { GanttChart } from '../../features/gantt/components/GanttChart';
+import { HolidayManager } from '../../features/gantt/components/HolidayManager';
 import { createDefaultTaskMeta } from '../../domain/task/meta';
 import { saveSnapshotToLocalStorage, saveTasksToCsvStorage, serializeTasksToCsv } from '../../store/actions/taskPersistence';
 import { useTaskStore } from '../../store/taskStore';
 import { TabItem, Tabs } from '../../shared/ui/Tabs';
 import { MainLayout } from '../layout/MainLayout';
+import { Sidebar, SidebarSection } from '../../shared/ui/Sidebar';
+import { Button } from '../../shared/ui/Button';
 
-const PANEL_STYLE: CSSProperties = { marginTop: 8, padding: 12, background: '#fff', borderRadius: 8 };
-const LIST_STYLE: CSSProperties = { marginTop: 16, padding: 12, background: '#fff', borderRadius: 8 };
+const LIST_STYLE: CSSProperties = { padding: 12, background: '#fff', borderRadius: 8 };
 
 const VIEW_TABS: TabItem[] = [
   { id: 'gantt', label: 'ガント' },
@@ -158,12 +160,27 @@ export function MainRoute() {
     downloadCsv(serializeTasksToCsv(dummyTasks, meta), 'project-template.csv');
   }
 
+  const sidebarContent = (
+    <Sidebar>
+      <SidebarSection title="CSV取込・保存" defaultOpen>
+        <CsvImportDialog />
+      </SidebarSection>
+      <SidebarSection title="休日管理">
+        <HolidayManager />
+      </SidebarSection>
+      <SidebarSection title="プロジェクト">
+        <Button variant="secondary" size="sm" onClick={handleCreateProject} style={{ width: '100%' }}>
+          サンプル作成
+        </Button>
+        <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>
+          ダミーデータを作成しCSVテンプレートをダウンロードします。
+        </p>
+      </SidebarSection>
+    </Sidebar>
+  );
+
   return (
-    <MainLayout>
-      <CsvImportDialog />
-      <section style={PANEL_STYLE}>
-        <button type="button" onClick={handleCreateProject}>プロジェクト作成</button>
-      </section>
+    <MainLayout sidebar={sidebarContent}>
       <Tabs items={VIEW_TABS} activeId={activeView} onChange={(id) => setActiveView(id as ViewTab)} />
 
       {activeView === 'gantt' ? (
