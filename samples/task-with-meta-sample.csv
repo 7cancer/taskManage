@@ -1,0 +1,8 @@
+#meta,version,1
+#meta,holidays,2026-01-02,2026-03-20,2026-07-10
+taskId,taskName,parentTaskId,status,startDate,endDate,assignee,priority,project,category,description,displayOrder
+P-001,プロジェクト準備,,todo,2026-01-05,2026-01-08,田中,high,新規PJ-A,計画,キックオフ準備,1
+P-002,要件定義,P-001,inProgress,2026-01-09,2026-01-20,佐藤,critical,新規PJ-A,要件,"顧客ヒアリング, 仕様整理",2
+P-003,基本設計,,review,2026-01-21,2026-02-05,鈴木,medium,新規PJ-A,設計,,3
+P-004,実装,,todo,2026-02-06,2026-03-15,,high,新規PJ-A,開発,,4
+P-005,受入・リリース,,todo,2026-03-16,2026-03-25,,medium,新規PJ-A,リリース,休日を避けて最終調整,5

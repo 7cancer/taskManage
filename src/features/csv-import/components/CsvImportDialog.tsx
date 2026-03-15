@@ -1,4 +1,5 @@
 import { ChangeEvent, useMemo, useState } from 'react';
+import { TaskMeta } from '../../../domain/task/meta';
 import { importTasksFromCsvText } from '../../../store/actions/taskImport';
 import { CsvFileHandle, persistTasksToCsvFile, serializeTasksToCsv, setCsvExportFileHandle } from '../../../store/actions/taskPersistence';
 import { useTaskStore } from '../../../store/taskStore';
@@ -21,8 +22,34 @@ interface SaveFilePickerWindow extends Window {
 }
 
 function parseCsvLine(line: string): string[] {
-  // NOTE: 最小実装のためカンマ分割のみ（クォート対応は後続タスクで実装）
-  return line.split(',').map((value) => value.trim());
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  result.push(current);
+  return result.map((value) => value.trim());
 }
 
 function ensureCsvExtension(fileName: string): string {
@@ -41,12 +68,20 @@ function triggerCsvDownload(csvText: string, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
+function parseHolidayInput(value: string): string[] {
+  const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+  return [...new Set(value.split(/[\s,]+/).map((token) => token.trim()).filter((token) => isoDatePattern.test(token)).sort())];
+}
+
 export function CsvImportDialog() {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [saveMessage, setSaveMessage] = useState<string>('');
   const [preview, setPreview] = useState<CsvPreviewState | null>(null);
-  const setTasks = useTaskStore((state) => state.setTasks);
+  const [holidayInput, setHolidayInput] = useState('');
+  const setSnapshot = useTaskStore((state) => state.setSnapshot);
+  const setHolidays = useTaskStore((state) => state.setHolidays);
   const tasks = useTaskStore((state) => state.tasks);
+  const meta = useTaskStore((state) => state.meta);
 
   const summaryText = useMemo(() => {
     if (!preview) return '';
@@ -74,15 +109,19 @@ export function CsvImportDialog() {
         return;
       }
 
-      const header = parseCsvLine(lines[0]);
-      const firstRow = lines[1] ? parseCsvLine(lines[1]) : undefined;
+      const headerLineIndex = lines.findIndex((line) => !line.startsWith('#meta'));
+      const headerLine = headerLineIndex >= 0 ? lines[headerLineIndex] : lines[0];
+      const header = parseCsvLine(headerLine);
+      const firstDataLine = headerLineIndex >= 0 ? lines[headerLineIndex + 1] : lines[1];
+      const firstRow = firstDataLine ? parseCsvLine(firstDataLine) : undefined;
 
       const importResult = importTasksFromCsvText(text);
-      setTasks(importResult.validTasks);
+      setSnapshot(importResult.validTasks, importResult.meta);
+      setHolidayInput(importResult.meta.holidays.join('\n'));
 
       setPreview({
         fileName: file.name,
-        rowCount: Math.max(lines.length - 1, 0),
+        rowCount: Math.max(lines.filter((line) => !line.startsWith('#meta')).length - 1, 0),
         header,
         firstRow,
         rawHead: text.slice(0, 200),
@@ -93,20 +132,22 @@ export function CsvImportDialog() {
       if (importResult.errors.length > 0) {
         setErrorMessage(`取込時に ${importResult.errors.length} 件のエラーがありました（正常データ ${importResult.validTasks.length} 件を反映）。`);
       }
-
-      // 開発中の動作確認用ログ
-      console.log('[CSV Preview: first 200 chars]', text.slice(0, 200));
-      console.log('[CSV Import Result]', importResult);
     } catch (error) {
       setPreview(null);
       setErrorMessage(`CSVの読込中にエラーが発生しました: ${(error as Error).message}`);
     } finally {
-      // 同一ファイル再選択で onChange を発火させるためにリセット
       event.target.value = '';
     }
   }
 
-  async function handleExportToCvs() {
+  function currentMeta(): TaskMeta {
+    return {
+      ...meta,
+      holidays: parseHolidayInput(holidayInput),
+    };
+  }
+
+  async function handleExportToCsv() {
     if (!preview) return;
 
     const targetFileName = ensureCsvExtension(preview.fileName);
@@ -115,8 +156,11 @@ export function CsvImportDialog() {
     try {
       setErrorMessage('');
 
+      const latestMeta = currentMeta();
+      setHolidays(latestMeta.holidays);
+
       if (!pickerWindow.showSaveFilePicker) {
-        triggerCsvDownload(serializeTasksToCsv(tasks), targetFileName);
+        triggerCsvDownload(serializeTasksToCsv(tasks, latestMeta), targetFileName);
         return;
       }
 
@@ -126,12 +170,11 @@ export function CsvImportDialog() {
       });
 
       setCsvExportFileHandle(fileHandle);
-      await persistTasksToCsvFile(tasks);
+      await persistTasksToCsvFile(tasks, latestMeta);
     } catch (error) {
-      setErrorMessage(`CVSエクスポートに失敗しました: ${(error as Error).message}`);
+      setErrorMessage(`CSVエクスポートに失敗しました: ${(error as Error).message}`);
     }
   }
-
 
   async function handleSave() {
     if (!preview) return;
@@ -139,9 +182,11 @@ export function CsvImportDialog() {
     try {
       setErrorMessage('');
       setSaveMessage('');
-      const saved = await persistTasksToCsvFile(tasks);
+      const latestMeta = currentMeta();
+      setHolidays(latestMeta.holidays);
+      const saved = await persistTasksToCsvFile(tasks, latestMeta);
       if (!saved) {
-        setErrorMessage('先に「CVSへのエクスポート」で保存先CSVファイルを選択してください。');
+        setErrorMessage('先に「CSVへのエクスポート」で保存先CSVファイルを選択してください。');
         return;
       }
 
@@ -157,9 +202,24 @@ export function CsvImportDialog() {
       <input type="file" accept=".csv,text/csv" onChange={handleFileChange} />
 
       {preview && (
+        <div style={{ marginTop: 12 }}>
+          <label htmlFor="holidayInput" style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>
+            会社独自の休日 (YYYY-MM-DD を改行/カンマ区切り)
+          </label>
+          <textarea
+            id="holidayInput"
+            rows={4}
+            value={holidayInput}
+            onChange={(event) => setHolidayInput(event.target.value)}
+            style={{ width: '100%', maxWidth: 500 }}
+          />
+        </div>
+      )}
+
+      {preview && (
         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
-          <button type="button" onClick={handleExportToCvs}>
-            CVSへのエクスポート
+          <button type="button" onClick={handleExportToCsv}>
+            CSVへのエクスポート
           </button>
           <button
             type="button"
