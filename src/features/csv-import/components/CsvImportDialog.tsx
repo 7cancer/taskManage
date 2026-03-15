@@ -215,9 +215,6 @@ export function CsvImportDialog() {
       const latestMeta = currentMeta();
       setHolidays(latestMeta.holidays);
 
-      const latestMeta = currentMeta();
-      setHolidays(latestMeta.holidays);
-
       if (!pickerWindow.showSaveFilePicker) {
         triggerCsvDownload(serializeTasksToCsv(tasks, latestMeta), targetFileName);
         return;
