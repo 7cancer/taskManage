@@ -9,7 +9,7 @@ import { GanttRowTree } from './GanttRowTree';
 import { GanttGridBackground } from './GanttGridBackground';
 import { GanttTimelineRow } from './GanttTimelineRow';
 import { createTaskFromRightClick } from '../interactions/rightClickCreate';
-import { calculateGanttLayout, getDateOffsetDays } from '../lib/ganttLayout';
+import { calculateGanttLayout, calculateGroupedGanttLayout, GanttGroupBy, getDateOffsetDays } from '../lib/ganttLayout';
 import { Modal } from '../../../shared/ui/Modal';
 import { useTaskStore } from '../../../store/taskStore';
 
@@ -191,12 +191,27 @@ function collectDescendantTaskIds(rootTaskId: string, childrenByParentId: Map<st
   return result;
 }
 
+const GROUP_BY_OPTIONS: { id: GanttGroupBy; label: string }[] = [
+  { id: 'none', label: 'なし' },
+  { id: 'project', label: 'プロジェクト' },
+  { id: 'category', label: 'カテゴリ' },
+];
+
+const GROUP_HEADER_HEIGHT = 38;
+
 export function GanttChart({ tasks, holidays }: GanttChartProps) {
   const layout = useMemo(() => calculateGanttLayout(tasks), [tasks]);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [selectedRangeId, setSelectedRangeId] = useState<string>('6m');
   const [selectedStartDate, setSelectedStartDate] = useState<string>('');
   const [hideDoneTasks, setHideDoneTasks] = useState(false);
+  const [groupBy, setGroupBy] = useState<GanttGroupBy>('none');
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  const groupedSections = useMemo(
+    () => calculateGroupedGanttLayout(tasks, groupBy),
+    [tasks, groupBy],
+  );
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const headerContentRef = useRef<HTMLDivElement | null>(null);
   const [timelineScrollLeft, setTimelineScrollLeft] = useState(0);
@@ -707,6 +722,23 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
     setHideDoneTasks(event.target.checked);
   }
 
+  function handleGroupByChange(event: ChangeEvent<HTMLSelectElement>) {
+    setGroupBy(event.target.value as GanttGroupBy);
+    setCollapsedGroups(new Set());
+  }
+
+  function toggleGroupCollapse(groupLabel: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupLabel)) {
+        next.delete(groupLabel);
+      } else {
+        next.add(groupLabel);
+      }
+      return next;
+    });
+  }
+
   function handleRowContextMenu(event: MouseEvent<HTMLDivElement>, parentTaskId?: string) {
     event.preventDefault();
 
@@ -817,60 +849,82 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
     replaceTasks(sorted.map((task, index) => ({ ...task, displayOrder: index + 1 })));
   }
 
+  // Build visible rows for a given row list and vertical offset
+  function buildVirtualizedRows(
+    rows: typeof visibleRows,
+    verticalOffset: number,
+    firstRow: number,
+    lastRow: number,
+  ): { left: React.ReactNode[]; right: React.ReactNode[] } {
+    const left: React.ReactNode[] = [];
+    const right: React.ReactNode[] = [];
+
+    for (let i = firstRow; i <= lastRow && i < rows.length; i++) {
+      const { task, depth, start } = rows[i];
+      const dragShift = dragShiftByTaskId.get(task.taskId) ?? 0;
+      const isDragging = currentDragSnapshot.state?.affectedTaskIds.includes(task.taskId) ?? false;
+      const isResizing = currentResizeSnapshot.state?.taskId === task.taskId;
+      const resizeOffset = isResizing ? currentResizeSnapshot.offsetDays : 0;
+
+      left.push(
+        <div
+          key={task.taskId}
+          onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}
+          style={{
+            position: 'absolute',
+            top: verticalOffset + i * GANTT_ROW_HEIGHT,
+            left: 0,
+            right: 0,
+            display: 'flex',
+            alignItems: 'center',
+            height: GANTT_ROW_HEIGHT,
+            boxSizing: 'border-box',
+            borderTop: '1px solid #f1f5f9',
+          }}
+        >
+          <GanttRowTree taskName={task.taskName} depth={depth} status={task.status} />
+        </div>,
+      );
+
+      right.push(
+        <GanttTimelineRow
+          key={task.taskId}
+          task={task}
+          depth={depth}
+          start={start}
+          viewStart={viewStart}
+          visibleDays={visibleDays}
+          dragShift={dragShift}
+          isDragging={isDragging}
+          resizeOffsetDays={resizeOffset}
+          isResizing={isResizing}
+          isParentTask={parentTaskIdSet.has(task.taskId)}
+          ancestorHighlights={computeAncestorHighlights(task)}
+          rowIndex={verticalOffset / GANTT_ROW_HEIGHT + i}
+          timelineScrollLeft={timelineScrollLeft}
+          timelineViewportWidth={effectiveTimelineViewportWidth}
+          onBarMouseDown={handleBarMouseDown}
+          onResizeMouseDown={handleResizeHandleMouseDown}
+          onBarClick={openEditModal}
+          onContextMenu={handleTimelineRowContextMenu}
+        />,
+      );
+    }
+
+    return { left, right };
+  }
+
   // Build the visible rows slice for virtualization
   const virtualizedRowsLeft: React.ReactNode[] = [];
   const virtualizedRowsRight: React.ReactNode[] = [];
 
-  for (let i = firstVisibleRow; i <= lastVisibleRow && i < visibleRows.length; i++) {
-    const { task, depth, start } = visibleRows[i];
-    const dragShift = dragShiftByTaskId.get(task.taskId) ?? 0;
-    const isDragging = currentDragSnapshot.state?.affectedTaskIds.includes(task.taskId) ?? false;
-    const isResizing = currentResizeSnapshot.state?.taskId === task.taskId;
-    const resizeOffset = isResizing ? currentResizeSnapshot.offsetDays : 0;
+  // Grouped sections rendering
+  const isGrouped = groupBy !== 'none' && groupedSections !== null;
 
-    virtualizedRowsLeft.push(
-      <div
-        key={task.taskId}
-        onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}
-        style={{
-          position: 'absolute',
-          top: i * GANTT_ROW_HEIGHT,
-          left: 0,
-          right: 0,
-          display: 'flex',
-          alignItems: 'center',
-          height: GANTT_ROW_HEIGHT,
-          boxSizing: 'border-box',
-          borderTop: '1px solid #f1f5f9',
-        }}
-      >
-        <GanttRowTree taskName={task.taskName} depth={depth} status={task.status} />
-      </div>,
-    );
-
-    virtualizedRowsRight.push(
-      <GanttTimelineRow
-        key={task.taskId}
-        task={task}
-        depth={depth}
-        start={start}
-        viewStart={viewStart}
-        visibleDays={visibleDays}
-        dragShift={dragShift}
-        isDragging={isDragging}
-        resizeOffsetDays={resizeOffset}
-        isResizing={isResizing}
-        isParentTask={parentTaskIdSet.has(task.taskId)}
-        ancestorHighlights={computeAncestorHighlights(task)}
-        rowIndex={i}
-        timelineScrollLeft={timelineScrollLeft}
-        timelineViewportWidth={effectiveTimelineViewportWidth}
-        onBarMouseDown={handleBarMouseDown}
-        onResizeMouseDown={handleResizeHandleMouseDown}
-        onBarClick={openEditModal}
-        onContextMenu={handleTimelineRowContextMenu}
-      />,
-    );
+  if (!isGrouped) {
+    const result = buildVirtualizedRows(visibleRows, 0, firstVisibleRow, lastVisibleRow);
+    virtualizedRowsLeft.push(...result.left);
+    virtualizedRowsRight.push(...result.right);
   }
 
   return (
@@ -936,6 +990,14 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
               </select>
             </label>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              グループ化:
+              <select value={groupBy} onChange={handleGroupByChange}>
+                {GROUP_BY_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <input type="checkbox" checked={hideDoneTasks} onChange={handleHideDoneChange} />
               完了タスクを非表示
             </label>
@@ -987,38 +1049,179 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
           </div>
         </div>
 
-        <div
-          ref={bodyScrollRef}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)`,
-            maxHeight: '70vh',
-            overflowY: 'auto',
-          }}
-          onScroll={(event) => {
-            setVerticalScrollTop(event.currentTarget.scrollTop);
-          }}
-        >
-          <div style={{ position: 'relative', height: totalContentHeight }}>
-            {virtualizedRowsLeft}
-          </div>
+        {isGrouped ? (
+          <div
+            ref={bodyScrollRef}
+            style={{ maxHeight: '70vh', overflowY: 'auto' }}
+            onScroll={(event) => {
+              setVerticalScrollTop(event.currentTarget.scrollTop);
+            }}
+          >
+            {groupedSections!.map((section) => {
+              const isCollapsed = collapsedGroups.has(section.groupLabel);
+              const sectionRows = isCollapsed
+                ? []
+                : section.layout.rows.filter((row) => !hiddenTaskIdSet.has(row.task.taskId));
+              const sectionContentHeight = sectionRows.length * GANTT_ROW_HEIGHT;
 
-          <div ref={timelineScrollRef} onScroll={handleTimelineScroll} style={{ overflowX: 'auto' }}>
-            <div style={{ width: timelineWidth, position: 'relative', height: totalContentHeight }}>
-              <GanttGridBackground
-                visibleDays={visibleDays}
-                dayColumnWidth={DAY_COLUMN_WIDTH}
-                rowCount={visibleRows.length}
-                rowHeight={GANTT_ROW_HEIGHT}
-                dayDates={dayDates}
-                monthBoundaryIndexSet={monthBoundaryIndexSet}
-                isTodayCell={isTodayCell}
-                isHolidayCell={isHolidayCell}
-              />
-              {virtualizedRowsRight}
+              const sectionLeft: React.ReactNode[] = [];
+              const sectionRight: React.ReactNode[] = [];
+              if (!isCollapsed) {
+                for (let i = 0; i < sectionRows.length; i++) {
+                  const { task, depth, start } = sectionRows[i];
+                  const dragShift = dragShiftByTaskId.get(task.taskId) ?? 0;
+                  const isDragging = currentDragSnapshot.state?.affectedTaskIds.includes(task.taskId) ?? false;
+                  const isResizingRow = currentResizeSnapshot.state?.taskId === task.taskId;
+                  const resizeOffset = isResizingRow ? currentResizeSnapshot.offsetDays : 0;
+
+                  sectionLeft.push(
+                    <div
+                      key={task.taskId}
+                      onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}
+                      style={{
+                        position: 'absolute',
+                        top: i * GANTT_ROW_HEIGHT,
+                        left: 0,
+                        right: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        height: GANTT_ROW_HEIGHT,
+                        boxSizing: 'border-box',
+                        borderTop: '1px solid #f1f5f9',
+                      }}
+                    >
+                      <GanttRowTree taskName={task.taskName} depth={depth} status={task.status} />
+                    </div>,
+                  );
+
+                  sectionRight.push(
+                    <GanttTimelineRow
+                      key={task.taskId}
+                      task={task}
+                      depth={depth}
+                      start={start}
+                      viewStart={viewStart}
+                      visibleDays={visibleDays}
+                      dragShift={dragShift}
+                      isDragging={isDragging}
+                      resizeOffsetDays={resizeOffset}
+                      isResizing={isResizingRow}
+                      isParentTask={parentTaskIdSet.has(task.taskId)}
+                      ancestorHighlights={computeAncestorHighlights(task)}
+                      rowIndex={i}
+                      timelineScrollLeft={timelineScrollLeft}
+                      timelineViewportWidth={effectiveTimelineViewportWidth}
+                      onBarMouseDown={handleBarMouseDown}
+                      onResizeMouseDown={handleResizeHandleMouseDown}
+                      onBarClick={openEditModal}
+                      onContextMenu={handleTimelineRowContextMenu}
+                    />,
+                  );
+                }
+              }
+
+              return (
+                <div key={section.groupLabel} style={{ borderTop: '2px solid #cbd5e1' }}>
+                  <div
+                    onClick={() => toggleGroupCollapse(section.groupLabel)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      height: GROUP_HEADER_HEIGHT,
+                      padding: '0 12px',
+                      background: '#e2e8f0',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: 14,
+                      userSelect: 'none',
+                      position: 'sticky',
+                      top: 0,
+                      zIndex: 10,
+                    }}
+                  >
+                    <span style={{
+                      display: 'inline-block',
+                      transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.15s',
+                      fontSize: 12,
+                    }}>
+                      ▼
+                    </span>
+                    <span>{groupBy === 'project' ? 'PJ' : 'Cat'}: {section.groupLabel}</span>
+                    <span style={{ fontWeight: 400, fontSize: 12, color: '#64748b' }}>
+                      ({section.layout.rows.length}件)
+                    </span>
+                  </div>
+                  {!isCollapsed && (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)`,
+                      }}
+                    >
+                      <div style={{ position: 'relative', height: sectionContentHeight }}>
+                        {sectionLeft}
+                      </div>
+                      <div
+                        ref={section.groupLabel === groupedSections![0].groupLabel ? timelineScrollRef : undefined}
+                        onScroll={section.groupLabel === groupedSections![0].groupLabel ? handleTimelineScroll : undefined}
+                        style={{ overflowX: 'auto' }}
+                      >
+                        <div style={{ width: timelineWidth, position: 'relative', height: sectionContentHeight }}>
+                          <GanttGridBackground
+                            visibleDays={visibleDays}
+                            dayColumnWidth={DAY_COLUMN_WIDTH}
+                            rowCount={sectionRows.length}
+                            rowHeight={GANTT_ROW_HEIGHT}
+                            dayDates={dayDates}
+                            monthBoundaryIndexSet={monthBoundaryIndexSet}
+                            isTodayCell={isTodayCell}
+                            isHolidayCell={isHolidayCell}
+                          />
+                          {sectionRight}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div
+            ref={bodyScrollRef}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)`,
+              maxHeight: '70vh',
+              overflowY: 'auto',
+            }}
+            onScroll={(event) => {
+              setVerticalScrollTop(event.currentTarget.scrollTop);
+            }}
+          >
+            <div style={{ position: 'relative', height: totalContentHeight }}>
+              {virtualizedRowsLeft}
+            </div>
+
+            <div ref={timelineScrollRef} onScroll={handleTimelineScroll} style={{ overflowX: 'auto' }}>
+              <div style={{ width: timelineWidth, position: 'relative', height: totalContentHeight }}>
+                <GanttGridBackground
+                  visibleDays={visibleDays}
+                  dayColumnWidth={DAY_COLUMN_WIDTH}
+                  rowCount={visibleRows.length}
+                  rowHeight={GANTT_ROW_HEIGHT}
+                  dayDates={dayDates}
+                  monthBoundaryIndexSet={monthBoundaryIndexSet}
+                  isTodayCell={isTodayCell}
+                  isHolidayCell={isHolidayCell}
+                />
+                {virtualizedRowsRight}
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
 
