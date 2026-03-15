@@ -9,7 +9,7 @@ import { GanttRowTree } from './GanttRowTree';
 import { GanttGridBackground } from './GanttGridBackground';
 import { GanttTimelineRow } from './GanttTimelineRow';
 import { createTaskFromRightClick } from '../interactions/rightClickCreate';
-import { calculateGanttLayout, calculateGroupedGanttLayout, GanttGroupBy, GanttGroupSection, getDateOffsetDays } from '../lib/ganttLayout';
+import { calculateGanttLayout, calculateGroupedGanttLayout, GanttGroupBy, getDateOffsetDays } from '../lib/ganttLayout';
 import { Modal } from '../../../shared/ui/Modal';
 import { useTaskStore } from '../../../store/taskStore';
 
@@ -919,7 +919,6 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
   const virtualizedRowsRight: React.ReactNode[] = [];
 
   // Grouped sections rendering
-  const groupedBodySections: React.ReactNode[] = [];
   const isGrouped = groupBy !== 'none' && groupedSections !== null;
 
   if (!isGrouped) {
