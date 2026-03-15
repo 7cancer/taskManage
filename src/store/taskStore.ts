@@ -1,12 +1,16 @@
 import { create } from 'zustand';
+import { createDefaultTaskMeta, TaskMeta } from '../domain/task/meta';
 import { Task } from '../domain/task/types';
 
 interface TaskStoreState {
   tasks: Task[];
+  meta: TaskMeta;
   taskIndexById: Record<string, number>;
   setTasks: (tasks: Task[]) => void;
+  setSnapshot: (tasks: Task[], meta: TaskMeta) => void;
   upsertTasks: (tasks: Task[]) => void;
   removeTasksById: (taskIds: string[]) => void;
+  setHolidays: (holidays: string[]) => void;
 }
 
 function buildTaskIndex(tasks: Task[]): Record<string, number> {
@@ -21,10 +25,18 @@ function buildTaskIndex(tasks: Task[]): Record<string, number> {
 
 export const useTaskStore = create<TaskStoreState>((set) => ({
   tasks: [],
+  meta: createDefaultTaskMeta(),
   taskIndexById: {},
   setTasks: (tasks) =>
+    set((state) => ({
+      tasks,
+      meta: state.meta,
+      taskIndexById: buildTaskIndex(tasks),
+    })),
+  setSnapshot: (tasks, meta) =>
     set({
       tasks,
+      meta,
       taskIndexById: buildTaskIndex(tasks),
     }),
   upsertTasks: (incomingTasks) =>
@@ -48,6 +60,7 @@ export const useTaskStore = create<TaskStoreState>((set) => ({
 
       return {
         tasks: nextTasks,
+        meta: state.meta,
         taskIndexById: nextIndexById,
       };
     }),
@@ -64,7 +77,17 @@ export const useTaskStore = create<TaskStoreState>((set) => ({
 
       return {
         tasks: nextTasks,
+        meta: state.meta,
         taskIndexById: buildTaskIndex(nextTasks),
       };
     }),
+  setHolidays: (holidays) =>
+    set((state) => ({
+      tasks: state.tasks,
+      meta: {
+        ...state.meta,
+        holidays,
+      },
+      taskIndexById: state.taskIndexById,
+    })),
 }));

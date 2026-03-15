@@ -13,6 +13,7 @@ import { calculateGanttLayout, getDateOffsetDays } from '../lib/ganttLayout';
 
 interface GanttChartProps {
   tasks: Task[];
+  holidays: string[];
 }
 
 interface ContextMenuState {
@@ -103,33 +104,6 @@ function buildMonthSpans(startDate: Date, totalDays: number): MonthSpan[] {
   return spans;
 }
 
-function isJapaneseHoliday(date: Date): boolean {
-  const month = date.getMonth() + 1;
-  const day = date.getDate();
-
-  const fixedHolidays = new Set([
-    '01-01',
-    '02-11',
-    '02-23',
-    '04-29',
-    '05-03',
-    '05-04',
-    '05-05',
-    '08-11',
-    '11-03',
-    '11-23',
-  ]);
-  const mmdd = `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-
-  return fixedHolidays.has(mmdd);
-}
-
-function isHolidayCell(date: Date): boolean {
-  const dayOfWeek = date.getDay();
-  if (dayOfWeek === 0 || dayOfWeek === 6) return true;
-  return isJapaneseHoliday(date);
-}
-
 function getJstDateLabel(baseDate = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Tokyo',
@@ -209,7 +183,7 @@ function collectDescendantTaskIds(rootTaskId: string, childrenByParentId: Map<st
   return result;
 }
 
-export function GanttChart({ tasks }: GanttChartProps) {
+export function GanttChart({ tasks, holidays }: GanttChartProps) {
   const layout = useMemo(() => calculateGanttLayout(tasks), [tasks]);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [selectedRangeId, setSelectedRangeId] = useState<string>('6m');
@@ -221,6 +195,16 @@ export function GanttChart({ tasks }: GanttChartProps) {
   const animationFrameRef = useRef<number | null>(null);
   const ganttToolbarRef = useRef<HTMLDivElement | null>(null);
   const [ganttHeaderStickyTop, setGanttHeaderStickyTop] = useState(0);
+
+  const holidaySet = useMemo(() => new Set(holidays), [holidays]);
+  const isHolidayCell = useCallback(
+    (date: Date) => {
+      const dayOfWeek = date.getDay();
+      if (dayOfWeek === 0 || dayOfWeek === 6) return true;
+      return holidaySet.has(formatLabel(date));
+    },
+    [holidaySet],
+  );
 
   // Drag state: use ref for intermediate values, only setState on mouseup
   const dragStateRef = useRef<DragState | null>(null);

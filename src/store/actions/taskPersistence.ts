@@ -1,3 +1,5 @@
+import { createDefaultTaskMeta, TaskMeta, TaskSnapshot } from '../../domain/task/meta';
+import { importTasksFromCsvText } from './taskImport';
 import { Task } from '../../domain/task/types';
 
 const STORAGE_KEY = 'taskManage.tasks';
@@ -49,6 +51,11 @@ function escapeCsvValue(value: string): string {
   return value;
 }
 
+function normalizeHolidays(holidays: string[]): string[] {
+  const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+  return [...new Set(holidays.filter((holiday) => isoDatePattern.test(holiday)).sort())];
+}
+
 async function ensureWritePermission(fileHandle: CsvFileHandle): Promise<boolean> {
   if (!fileHandle.queryPermission || !fileHandle.requestPermission) {
     return true;
@@ -96,7 +103,7 @@ function getCsvWorker(): Worker | null {
   }
 }
 
-export function serializeTasksToCsv(tasks: Task[]): string {
+export function serializeTasksToCsv(tasks: Task[], meta: TaskMeta = createDefaultTaskMeta()): string {
   const header = CSV_COLUMNS.join(',');
   const lines = tasks.map((task) =>
     CSV_COLUMNS.map((column) => {
@@ -105,13 +112,18 @@ export function serializeTasksToCsv(tasks: Task[]): string {
     }).join(','),
   );
 
-  return [header, ...lines].join('\n');
+  const normalizedMeta: TaskMeta = {
+    holidays: normalizeHolidays(meta.holidays),
+  };
+
+  const metaLines = ['#meta,version,1', ['#meta', 'holidays', ...normalizedMeta.holidays].map(escapeCsvValue).join(',')];
+  return [...metaLines, header, ...lines].join('\n');
 }
 
-export async function serializeTasksToCsvAsync(tasks: Task[]): Promise<string> {
+export async function serializeTasksToCsvAsync(tasks: Task[], meta: TaskMeta = createDefaultTaskMeta()): Promise<string> {
   const worker = getCsvWorker();
   if (!worker) {
-    return serializeTasksToCsv(tasks);
+    return serializeTasksToCsv(tasks, meta);
   }
 
   const id = ++csvWorkerRequestId;
@@ -119,17 +131,28 @@ export async function serializeTasksToCsvAsync(tasks: Task[]): Promise<string> {
   return new Promise<string>((resolve) => {
     csvWorkerResolvers.set(id, {
       resolve,
-      reject: () => resolve(serializeTasksToCsv(tasks)),
+      reject: () => resolve(serializeTasksToCsv(tasks, meta)),
     });
-    worker.postMessage({ id, tasks });
+    worker.postMessage({ id, tasks, meta });
   });
+}
+
+export function parseTaskSnapshotFromCsvText(csvText: string): TaskSnapshot {
+  const importResult = importTasksFromCsvText(csvText);
+
+  return {
+    tasks: importResult.validTasks,
+    meta: {
+      holidays: normalizeHolidays(importResult.meta.holidays),
+    },
+  };
 }
 
 export function setCsvExportFileHandle(fileHandle: CsvFileHandle | null) {
   csvExportFileHandle = fileHandle;
 }
 
-export async function persistTasksToCsvFile(tasks: Task[]): Promise<boolean> {
+export async function persistTasksToCsvFile(tasks: Task[], meta: TaskMeta = createDefaultTaskMeta()): Promise<boolean> {
   if (!csvExportFileHandle) {
     return false;
   }
@@ -140,7 +163,7 @@ export async function persistTasksToCsvFile(tasks: Task[]): Promise<boolean> {
     return false;
   }
 
-  const csvText = await serializeTasksToCsvAsync(tasks);
+  const csvText = await serializeTasksToCsvAsync(tasks, meta);
   if (writeId !== latestCsvFileWriteId) {
     return false;
   }
@@ -151,17 +174,17 @@ export async function persistTasksToCsvFile(tasks: Task[]): Promise<boolean> {
   return true;
 }
 
-export function saveTasksToCsvStorage(tasks: Task[]) {
+export function saveTasksToCsvStorage(tasks: Task[], meta: TaskMeta = createDefaultTaskMeta()) {
   const writeId = ++latestCsvStorageWriteId;
 
-  void serializeTasksToCsvAsync(tasks)
+  void serializeTasksToCsvAsync(tasks, meta)
     .then((csvText) => {
       if (writeId !== latestCsvStorageWriteId) return;
       localStorage.setItem(CSV_STORAGE_KEY, csvText);
     })
     .catch(() => {
       if (writeId !== latestCsvStorageWriteId) return;
-      localStorage.setItem(CSV_STORAGE_KEY, serializeTasksToCsv(tasks));
+      localStorage.setItem(CSV_STORAGE_KEY, serializeTasksToCsv(tasks, meta));
     });
 }
 
@@ -169,14 +192,31 @@ export function loadTasksCsvFromLocalStorage(): string {
   return localStorage.getItem(CSV_STORAGE_KEY) ?? '';
 }
 
-export function saveTasksToLocalStorage(tasks: Task[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+export function saveSnapshotToLocalStorage(tasks: Task[], meta: TaskMeta) {
+  const snapshot: TaskSnapshot = {
+    tasks,
+    meta: {
+      holidays: normalizeHolidays(meta.holidays),
+    },
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
 }
 
-export function loadTasksFromLocalStorage(): Task[] {
+export function loadSnapshotFromLocalStorage(): TaskSnapshot {
   const value = localStorage.getItem(STORAGE_KEY);
-  if (!value) return [];
+  if (!value) {
+    return { tasks: [], meta: createDefaultTaskMeta() };
+  }
 
-  // TODO: パース後の型検証を追加する。
-  return JSON.parse(value) as Task[];
+  const parsed = JSON.parse(value) as Task[] | TaskSnapshot;
+  if (Array.isArray(parsed)) {
+    return { tasks: parsed, meta: createDefaultTaskMeta() };
+  }
+
+  return {
+    tasks: parsed.tasks ?? [],
+    meta: {
+      holidays: normalizeHolidays(parsed.meta?.holidays ?? []),
+    },
+  };
 }
