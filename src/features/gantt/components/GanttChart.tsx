@@ -10,8 +10,7 @@ import { GanttGridBackground } from './GanttGridBackground';
 import { GanttTimelineRow } from './GanttTimelineRow';
 import { createTaskFromRightClick } from '../interactions/rightClickCreate';
 import { calculateGanttLayout, calculateGroupedGanttLayout, GanttGroupBy, getDateOffsetDays } from '../lib/ganttLayout';
-import { Modal } from '../../../shared/ui/Modal';
-import { useTaskStore } from '../../../store/taskStore';
+import { Button } from '../../../shared/ui/Button';
 
 interface GanttChartProps {
   tasks: Task[];
@@ -139,11 +138,6 @@ function normalizeDateRange(startDate: string, endDate: string): { startDate: st
 }
 
 
-function parseHolidayInput(value: string): string[] {
-  const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
-  return [...new Set(value.split(/[\s,]+/).map((token) => token.trim()).filter((token) => isoDatePattern.test(token)).sort())];
-}
-
 function buildInitialTaskForm(task?: Task): TaskFormValues {
   if (task) {
     return {
@@ -219,11 +213,6 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
   const animationFrameRef = useRef<number | null>(null);
   const ganttToolbarRef = useRef<HTMLDivElement | null>(null);
   const [ganttHeaderStickyTop, setGanttHeaderStickyTop] = useState(0);
-  const setHolidays = useTaskStore((state) => state.setHolidays);
-  const [holidayDraft, setHolidayDraft] = useState('');
-  const [isHolidayEditorOpen, setIsHolidayEditorOpen] = useState(false);
-  const [isHolidayListOpen, setIsHolidayListOpen] = useState(false);
-
   const holidaySet = useMemo(() => new Set(holidays), [holidays]);
   const isHolidayCell = useCallback(
     (date: Date) => {
@@ -696,20 +685,6 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
   };
 
 
-  function openHolidayEditor() {
-    setHolidayDraft(holidays.join('\n'));
-    setIsHolidayEditorOpen(true);
-  }
-
-  function handleSaveHolidays() {
-    setHolidays(parseHolidayInput(holidayDraft));
-    setIsHolidayEditorOpen(false);
-  }
-
-  function handleDeleteHoliday(targetHoliday: string) {
-    setHolidays(holidays.filter((holiday) => holiday !== targetHoliday));
-  }
-
   function handleRangeChange(event: ChangeEvent<HTMLSelectElement>) {
     setSelectedRangeId(event.target.value);
   }
@@ -950,26 +925,8 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            <button type="button" onClick={openCreateModal}>タスク新規登録</button>
-            <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-              <button type="button" onClick={openHolidayEditor}>定休日の追加</button>
-              <button
-                type="button"
-                onClick={() => setIsHolidayListOpen(true)}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  color: '#2563eb',
-                  textDecoration: 'underline',
-                  cursor: 'pointer',
-                  padding: 0,
-                  fontSize: 13,
-                }}
-              >
-                登録中の休日を確認する
-              </button>
-            </div>
-            <button type="button" onClick={handleSortByStartDate}>開始日でソート</button>
+            <Button variant="primary" size="sm" onClick={openCreateModal}>タスク新規登録</Button>
+            <Button variant="secondary" size="sm" onClick={handleSortByStartDate}>開始日でソート</Button>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               表示開始日:
               <input type="date" value={selectedStartDate} onChange={handleStartDateChange} />
@@ -1224,84 +1181,6 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
         )}
       </div>
 
-
-      {isHolidayEditorOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(15, 23, 42, 0.35)',
-            display: 'grid',
-            placeItems: 'center',
-            zIndex: 2000,
-          }}
-          onClick={() => setIsHolidayEditorOpen(false)}
-        >
-          <div onClick={(event) => event.stopPropagation()}>
-            <Modal>
-              <div style={{ background: '#fff', width: 'min(560px, 92vw)', borderRadius: 12, padding: 24 }}>
-                <h3 style={{ marginTop: 0 }}>定休日の追加</h3>
-                <p style={{ marginTop: 0, fontSize: 13, color: '#475569' }}>YYYY-MM-DD を改行またはカンマ区切りで入力してください。</p>
-                <textarea
-                  rows={8}
-                  value={holidayDraft}
-                  onChange={(event) => setHolidayDraft(event.target.value)}
-                  style={{ width: '100%' }}
-                />
-                <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                  <button type="button" onClick={() => setIsHolidayEditorOpen(false)} style={{ minWidth: 120 }}>
-                    キャンセル
-                  </button>
-                  <button type="button" onClick={handleSaveHolidays} style={{ minWidth: 120 }}>
-                    保存
-                  </button>
-                </div>
-              </div>
-            </Modal>
-          </div>
-        </div>
-      )}
-
-      {isHolidayListOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(15, 23, 42, 0.35)',
-            display: 'grid',
-            placeItems: 'center',
-            zIndex: 2000,
-          }}
-          onClick={() => setIsHolidayListOpen(false)}
-        >
-          <div onClick={(event) => event.stopPropagation()}>
-            <Modal>
-              <div style={{ background: '#fff', width: 'min(520px, 92vw)', borderRadius: 12, padding: 24 }}>
-                <h3 style={{ marginTop: 0 }}>登録中の休日一覧</h3>
-                {holidays.length === 0 ? (
-                  <p style={{ margin: '8px 0 0', color: '#475569' }}>登録中の休日はありません。</p>
-                ) : (
-                  <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none', display: 'grid', gap: 8 }}>
-                    {holidays.map((holiday) => (
-                      <li key={holiday} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px' }}>
-                        <span>{holiday}</span>
-                        <button type="button" onClick={() => handleDeleteHoliday(holiday)} style={{ color: '#b91c1c' }}>
-                          削除
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
-                  <button type="button" onClick={() => setIsHolidayListOpen(false)} style={{ minWidth: 120 }}>
-                    閉じる
-                  </button>
-                </div>
-              </div>
-            </Modal>
-          </div>
-        </div>
-      )}
 
       {contextMenu && (
         <GanttContextMenu x={contextMenu.x} y={contextMenu.y} onCreateTask={handleCreateTask} onClose={() => setContextMenu(null)} />
