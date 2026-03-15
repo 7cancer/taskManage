@@ -1,5 +1,4 @@
 import { ChangeEvent, useMemo, useRef, useState } from 'react';
-import { Modal } from '../../../shared/ui/Modal';
 import { TaskMeta } from '../../../domain/task/meta';
 import { importTasksFromCsvText } from '../../../store/actions/taskImport';
 import { CsvFileHandle, persistTasksToCsvFile, serializeTasksToCsv, setCsvExportFileHandle } from '../../../store/actions/taskPersistence';
@@ -77,22 +76,14 @@ function triggerCsvDownload(csvText: string, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
-function parseHolidayInput(value: string): string[] {
-  const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
-  return [...new Set(value.split(/[\s,]+/).map((token) => token.trim()).filter((token) => isoDatePattern.test(token)).sort())];
-}
 
 export function CsvImportDialog() {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [saveMessage, setSaveMessage] = useState<string>('');
   const [preview, setPreview] = useState<CsvPreviewState | null>(null);
-  const [holidayInput, setHolidayInput] = useState('');
-  const [holidayDraft, setHolidayDraft] = useState('');
-  const [isHolidayDialogOpen, setIsHolidayDialogOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const setSnapshot = useTaskStore((state) => state.setSnapshot);
-  const setHolidays = useTaskStore((state) => state.setHolidays);
   const tasks = useTaskStore((state) => state.tasks);
   const meta = useTaskStore((state) => state.meta);
 
@@ -122,10 +113,6 @@ export function CsvImportDialog() {
 
     const importResult = importTasksFromCsvText(text);
     setSnapshot(importResult.validTasks, importResult.meta);
-    const holidaysText = importResult.meta.holidays.join('\n');
-    setHolidayInput(holidaysText);
-    setHolidayDraft(holidaysText);
-
     setPreview({
       fileName,
       rowCount: Math.max(lines.filter((line) => !line.startsWith('#meta')).length - 1, 0),
@@ -188,20 +175,7 @@ export function CsvImportDialog() {
   }
 
   function currentMeta(): TaskMeta {
-    return {
-      ...meta,
-      holidays: parseHolidayInput(holidayInput),
-    };
-  }
-
-  function openHolidayDialog() {
-    setHolidayDraft(holidayInput);
-    setIsHolidayDialogOpen(true);
-  }
-
-  function handleHolidayDialogSave() {
-    setHolidayInput(holidayDraft);
-    setIsHolidayDialogOpen(false);
+    return meta;
   }
 
   async function handleExportToCsv() {
@@ -213,7 +187,6 @@ export function CsvImportDialog() {
     try {
       setErrorMessage('');
       const latestMeta = currentMeta();
-      setHolidays(latestMeta.holidays);
 
       if (!pickerWindow.showSaveFilePicker) {
         triggerCsvDownload(serializeTasksToCsv(tasks, latestMeta), targetFileName);
@@ -239,7 +212,6 @@ export function CsvImportDialog() {
       setErrorMessage('');
       setSaveMessage('');
       const latestMeta = currentMeta();
-      setHolidays(latestMeta.holidays);
       const saved = await persistTasksToCsvFile(tasks, latestMeta);
       if (!saved) {
         setErrorMessage('「ファイルを選択」または「CSVへのエクスポート」で保存先CSVファイルを選択してください。');
@@ -258,29 +230,6 @@ export function CsvImportDialog() {
       <button type="button" onClick={handleSelectCsv}>ファイルを選択</button>
       <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleFileChange} style={{ display: 'none' }} />
 
-      {preview && (
-        <div style={{ marginTop: 12 }}>
-          <button type="button" onClick={openHolidayDialog}>会社独自の休日</button>
-          <p style={{ marginTop: 8, marginBottom: 0, fontSize: 13, opacity: 0.85 }}>
-            登録中: {parseHolidayInput(holidayInput).length}日
-          </p>
-        </div>
-      )}
-
-      {preview && (
-        <div style={{ marginTop: 12 }}>
-          <label htmlFor="holidayInput" style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>
-            会社独自の休日 (YYYY-MM-DD を改行/カンマ区切り)
-          </label>
-          <textarea
-            id="holidayInput"
-            rows={4}
-            value={holidayInput}
-            onChange={(event) => setHolidayInput(event.target.value)}
-            style={{ width: '100%', maxWidth: 500 }}
-          />
-        </div>
-      )}
 
       {preview && (
         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
@@ -339,40 +288,6 @@ export function CsvImportDialog() {
         </div>
       )}
 
-      {isHolidayDialogOpen && (
-        <Modal>
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              background: 'rgba(15, 23, 42, 0.35)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 40,
-            }}
-          >
-            <div style={{ background: '#fff', borderRadius: 8, width: 'min(560px, 92vw)', padding: 16 }}>
-              <h3 style={{ marginTop: 0 }}>会社独自の休日</h3>
-              <p style={{ marginTop: 0, fontSize: 13, opacity: 0.8 }}>YYYY-MM-DD を改行またはカンマ区切りで入力してください。</p>
-              <textarea
-                rows={8}
-                value={holidayDraft}
-                onChange={(event) => setHolidayDraft(event.target.value)}
-                style={{ width: '100%' }}
-              />
-              <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
-                <button type="button" onClick={() => setIsHolidayDialogOpen(false)}>
-                  キャンセル
-                </button>
-                <button type="button" onClick={handleHolidayDialogSave}>
-                  反映
-                </button>
-              </div>
-            </div>
-          </div>
-        </Modal>
-      )}
     </section>
   );
 }
