@@ -882,7 +882,7 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
             borderTop: '1px solid #f1f5f9',
           }}
         >
-          <GanttRowTree taskName={task.taskName} depth={depth} status={task.status} />
+          <GanttRowTree taskName={task.taskName} depth={depth} status={task.status} onTaskNameClick={() => openEditModal(task)} />
         </div>,
       );
 
@@ -1090,7 +1090,7 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
                         borderTop: '1px solid #f1f5f9',
                       }}
                     >
-                      <GanttRowTree taskName={task.taskName} depth={depth} status={task.status} />
+                      <GanttRowTree taskName={task.taskName} depth={depth} status={task.status} onTaskNameClick={() => openEditModal(task)} />
                     </div>,
                   );
 
