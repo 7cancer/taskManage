@@ -215,6 +215,9 @@ export function CsvImportDialog() {
       const latestMeta = currentMeta();
       setHolidays(latestMeta.holidays);
 
+      const latestMeta = currentMeta();
+      setHolidays(latestMeta.holidays);
+
       if (!pickerWindow.showSaveFilePicker) {
         triggerCsvDownload(serializeTasksToCsv(tasks, latestMeta), targetFileName);
         return;
@@ -264,6 +267,21 @@ export function CsvImportDialog() {
           <p style={{ marginTop: 8, marginBottom: 0, fontSize: 13, opacity: 0.85 }}>
             登録中: {parseHolidayInput(holidayInput).length}日
           </p>
+        </div>
+      )}
+
+      {preview && (
+        <div style={{ marginTop: 12 }}>
+          <label htmlFor="holidayInput" style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>
+            会社独自の休日 (YYYY-MM-DD を改行/カンマ区切り)
+          </label>
+          <textarea
+            id="holidayInput"
+            rows={4}
+            value={holidayInput}
+            onChange={(event) => setHolidayInput(event.target.value)}
+            style={{ width: '100%', maxWidth: 500 }}
+          />
         </div>
       )}
 
