@@ -1,4 +1,5 @@
-import { ChangeEvent, useMemo, useState } from 'react';
+import { ChangeEvent, useMemo, useRef, useState } from 'react';
+import { Modal } from '../../../shared/ui/Modal';
 import { TaskMeta } from '../../../domain/task/meta';
 import { importTasksFromCsvText } from '../../../store/actions/taskImport';
 import { CsvFileHandle, persistTasksToCsvFile, serializeTasksToCsv, setCsvExportFileHandle } from '../../../store/actions/taskPersistence';
@@ -14,11 +15,19 @@ interface CsvPreviewState {
   errorCount: number;
 }
 
-interface SaveFilePickerWindow extends Window {
+interface OpenCsvFileHandle extends CsvFileHandle {
+  getFile: () => Promise<File>;
+}
+
+interface FilePickerWindow extends Window {
   showSaveFilePicker?: (options?: {
     suggestedName?: string;
     types?: Array<{ description: string; accept: Record<string, string[]> }>;
   }) => Promise<CsvFileHandle>;
+  showOpenFilePicker?: (options?: {
+    multiple?: boolean;
+    types?: Array<{ description: string; accept: Record<string, string[]> }>;
+  }) => Promise<OpenCsvFileHandle[]>;
 }
 
 function parseCsvLine(line: string): string[] {
@@ -78,6 +87,10 @@ export function CsvImportDialog() {
   const [saveMessage, setSaveMessage] = useState<string>('');
   const [preview, setPreview] = useState<CsvPreviewState | null>(null);
   const [holidayInput, setHolidayInput] = useState('');
+  const [holidayDraft, setHolidayDraft] = useState('');
+  const [isHolidayDialogOpen, setIsHolidayDialogOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const setSnapshot = useTaskStore((state) => state.setSnapshot);
   const setHolidays = useTaskStore((state) => state.setHolidays);
   const tasks = useTaskStore((state) => state.tasks);
@@ -89,6 +102,45 @@ export function CsvImportDialog() {
     return `読込候補: ${preview.fileName} / ${preview.rowCount}行`;
   }, [preview]);
 
+  function applyImportedCsv(text: string, fileName: string) {
+    const lines = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    if (lines.length === 0) {
+      setPreview(null);
+      setErrorMessage('CSVが空です。ヘッダー行を含むファイルを選択してください。');
+      return;
+    }
+
+    const headerLineIndex = lines.findIndex((line) => !line.startsWith('#meta'));
+    const headerLine = headerLineIndex >= 0 ? lines[headerLineIndex] : lines[0];
+    const header = parseCsvLine(headerLine);
+    const firstDataLine = headerLineIndex >= 0 ? lines[headerLineIndex + 1] : lines[1];
+    const firstRow = firstDataLine ? parseCsvLine(firstDataLine) : undefined;
+
+    const importResult = importTasksFromCsvText(text);
+    setSnapshot(importResult.validTasks, importResult.meta);
+    const holidaysText = importResult.meta.holidays.join('\n');
+    setHolidayInput(holidaysText);
+    setHolidayDraft(holidaysText);
+
+    setPreview({
+      fileName,
+      rowCount: Math.max(lines.filter((line) => !line.startsWith('#meta')).length - 1, 0),
+      header,
+      firstRow,
+      rawHead: text.slice(0, 200),
+      importedCount: importResult.validTasks.length,
+      errorCount: importResult.errors.length,
+    });
+
+    if (importResult.errors.length > 0) {
+      setErrorMessage(`取込時に ${importResult.errors.length} 件のエラーがありました（正常データ ${importResult.validTasks.length} 件を反映）。`);
+    }
+  }
+
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -96,47 +148,42 @@ export function CsvImportDialog() {
     try {
       setErrorMessage('');
       setSaveMessage('');
-
       const text = await file.text();
-      const lines = text
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0);
-
-      if (lines.length === 0) {
-        setPreview(null);
-        setErrorMessage('CSVが空です。ヘッダー行を含むファイルを選択してください。');
-        return;
-      }
-
-      const headerLineIndex = lines.findIndex((line) => !line.startsWith('#meta'));
-      const headerLine = headerLineIndex >= 0 ? lines[headerLineIndex] : lines[0];
-      const header = parseCsvLine(headerLine);
-      const firstDataLine = headerLineIndex >= 0 ? lines[headerLineIndex + 1] : lines[1];
-      const firstRow = firstDataLine ? parseCsvLine(firstDataLine) : undefined;
-
-      const importResult = importTasksFromCsvText(text);
-      setSnapshot(importResult.validTasks, importResult.meta);
-      setHolidayInput(importResult.meta.holidays.join('\n'));
-
-      setPreview({
-        fileName: file.name,
-        rowCount: Math.max(lines.filter((line) => !line.startsWith('#meta')).length - 1, 0),
-        header,
-        firstRow,
-        rawHead: text.slice(0, 200),
-        importedCount: importResult.validTasks.length,
-        errorCount: importResult.errors.length,
-      });
-
-      if (importResult.errors.length > 0) {
-        setErrorMessage(`取込時に ${importResult.errors.length} 件のエラーがありました（正常データ ${importResult.validTasks.length} 件を反映）。`);
-      }
+      applyImportedCsv(text, file.name);
     } catch (error) {
       setPreview(null);
       setErrorMessage(`CSVの読込中にエラーが発生しました: ${(error as Error).message}`);
     } finally {
       event.target.value = '';
+    }
+  }
+
+  async function handleSelectCsv() {
+    const pickerWindow = window as FilePickerWindow;
+    if (!pickerWindow.showOpenFilePicker) {
+      fileInputRef.current?.click();
+      return;
+    }
+
+    try {
+      setErrorMessage('');
+      setSaveMessage('');
+
+      const handles = await pickerWindow.showOpenFilePicker({
+        multiple: false,
+        types: [{ description: 'CSV file', accept: { 'text/csv': ['.csv'] } }],
+      });
+      const fileHandle = handles[0];
+      if (!fileHandle) return;
+
+      const file = await fileHandle.getFile();
+      const text = await file.text();
+      applyImportedCsv(text, file.name);
+
+      setCsvExportFileHandle(fileHandle);
+      setSaveMessage('読込ファイルを保存先CSVとして設定しました。');
+    } catch (error) {
+      setErrorMessage(`CSVの選択に失敗しました: ${(error as Error).message}`);
     }
   }
 
@@ -147,14 +194,26 @@ export function CsvImportDialog() {
     };
   }
 
+  function openHolidayDialog() {
+    setHolidayDraft(holidayInput);
+    setIsHolidayDialogOpen(true);
+  }
+
+  function handleHolidayDialogSave() {
+    setHolidayInput(holidayDraft);
+    setIsHolidayDialogOpen(false);
+  }
+
   async function handleExportToCsv() {
     if (!preview) return;
 
     const targetFileName = ensureCsvExtension(preview.fileName);
-    const pickerWindow = window as SaveFilePickerWindow;
+    const pickerWindow = window as FilePickerWindow;
 
     try {
       setErrorMessage('');
+      const latestMeta = currentMeta();
+      setHolidays(latestMeta.holidays);
 
       const latestMeta = currentMeta();
       setHolidays(latestMeta.holidays);
@@ -186,7 +245,7 @@ export function CsvImportDialog() {
       setHolidays(latestMeta.holidays);
       const saved = await persistTasksToCsvFile(tasks, latestMeta);
       if (!saved) {
-        setErrorMessage('先に「CSVへのエクスポート」で保存先CSVファイルを選択してください。');
+        setErrorMessage('「ファイルを選択」または「CSVへのエクスポート」で保存先CSVファイルを選択してください。');
         return;
       }
 
@@ -199,7 +258,17 @@ export function CsvImportDialog() {
   return (
     <section style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 8 }}>
       <h2 style={{ marginTop: 0 }}>CSV取込（最小実装）</h2>
-      <input type="file" accept=".csv,text/csv" onChange={handleFileChange} />
+      <button type="button" onClick={handleSelectCsv}>ファイルを選択</button>
+      <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleFileChange} style={{ display: 'none' }} />
+
+      {preview && (
+        <div style={{ marginTop: 12 }}>
+          <button type="button" onClick={openHolidayDialog}>会社独自の休日</button>
+          <p style={{ marginTop: 8, marginBottom: 0, fontSize: 13, opacity: 0.85 }}>
+            登録中: {parseHolidayInput(holidayInput).length}日
+          </p>
+        </div>
+      )}
 
       {preview && (
         <div style={{ marginTop: 12 }}>
@@ -271,6 +340,41 @@ export function CsvImportDialog() {
             <pre style={{ whiteSpace: 'pre-wrap' }}>{preview.rawHead}</pre>
           </details>
         </div>
+      )}
+
+      {isHolidayDialogOpen && (
+        <Modal>
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(15, 23, 42, 0.35)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 40,
+            }}
+          >
+            <div style={{ background: '#fff', borderRadius: 8, width: 'min(560px, 92vw)', padding: 16 }}>
+              <h3 style={{ marginTop: 0 }}>会社独自の休日</h3>
+              <p style={{ marginTop: 0, fontSize: 13, opacity: 0.8 }}>YYYY-MM-DD を改行またはカンマ区切りで入力してください。</p>
+              <textarea
+                rows={8}
+                value={holidayDraft}
+                onChange={(event) => setHolidayDraft(event.target.value)}
+                style={{ width: '100%' }}
+              />
+              <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setIsHolidayDialogOpen(false)}>
+                  キャンセル
+                </button>
+                <button type="button" onClick={handleHolidayDialogSave}>
+                  反映
+                </button>
+              </div>
+            </div>
+          </div>
+        </Modal>
       )}
     </section>
   );
