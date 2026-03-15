@@ -3,7 +3,8 @@ import { TASK_STATUS_LABELS, TASK_STATUS_ORDER } from '../../domain/task/constan
 import { Task, TaskStatus } from '../../domain/task/types';
 import { CsvImportDialog } from '../../features/csv-import/components/CsvImportDialog';
 import { GanttChart } from '../../features/gantt/components/GanttChart';
-import { saveTasksToCsvStorage, saveTasksToLocalStorage, serializeTasksToCsv } from '../../store/actions/taskPersistence';
+import { createDefaultTaskMeta } from '../../domain/task/meta';
+import { saveSnapshotToLocalStorage, saveTasksToCsvStorage, serializeTasksToCsv } from '../../store/actions/taskPersistence';
 import { useTaskStore } from '../../store/taskStore';
 import { TabItem, Tabs } from '../../shared/ui/Tabs';
 import { MainLayout } from '../layout/MainLayout';
@@ -144,15 +145,17 @@ function formatTaskSummary(task: Task): string {
 export function MainRoute() {
   const tasks = useTaskStore((state) => state.tasks);
   const setTasks = useTaskStore((state) => state.setTasks);
+  const holidays = useTaskStore((state) => state.meta.holidays);
   const groupedTasks = useMemo(() => groupTasksByStatus(tasks), [tasks]);
   const [activeView, setActiveView] = useState<ViewTab>('gantt');
 
   function handleCreateProject() {
     const dummyTasks = createDummyProjectTasks();
     setTasks(dummyTasks);
-    saveTasksToLocalStorage(dummyTasks);
-    saveTasksToCsvStorage(dummyTasks);
-    downloadCsv(serializeTasksToCsv(dummyTasks), 'project-template.csv');
+    const meta = createDefaultTaskMeta();
+    saveSnapshotToLocalStorage(dummyTasks, meta);
+    saveTasksToCsvStorage(dummyTasks, meta);
+    downloadCsv(serializeTasksToCsv(dummyTasks, meta), 'project-template.csv');
   }
 
   return (
@@ -164,7 +167,7 @@ export function MainRoute() {
       <Tabs items={VIEW_TABS} activeId={activeView} onChange={(id) => setActiveView(id as ViewTab)} />
 
       {activeView === 'gantt' ? (
-        <GanttChart tasks={tasks} />
+        <GanttChart tasks={tasks} holidays={holidays} />
       ) : (
         <section style={LIST_STYLE}>
           <h2 style={{ marginTop: 0 }}>読込済みタスク（簡易一覧）</h2>

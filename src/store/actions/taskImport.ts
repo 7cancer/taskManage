@@ -1,16 +1,70 @@
+import { createDefaultTaskMeta, TaskMeta } from '../../domain/task/meta';
 import { Task, TaskPriority, TaskStatus, TaskValidationError } from '../../domain/task/types';
 import { validateTask } from '../../domain/task/schema';
 
 export interface TaskImportResult {
   validTasks: Task[];
+  meta: TaskMeta;
   errors: TaskValidationError[];
 }
 
 const REQUIRED_COLUMNS = ['taskId', 'taskName', 'status', 'startDate', 'endDate', 'displayOrder'] as const;
+const META_PREFIX = '#meta';
 
 function parseCsvLine(line: string): string[] {
-  // NOTE: MVP実装。クォート対応は次ステップで追加する。
-  return line.split(',').map((value) => value.trim());
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  result.push(current);
+  return result.map((value) => value.trim());
+}
+
+function normalizeHolidays(holidays: string[]): string[] {
+  const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+  return [...new Set(holidays.filter((holiday) => isoDatePattern.test(holiday)).sort())];
+}
+
+function parseMeta(lines: string[]): { meta: TaskMeta; dataStartIndex: number } {
+  const meta = createDefaultTaskMeta();
+  let index = 0;
+
+  while (index < lines.length) {
+    const cols = parseCsvLine(lines[index]);
+    if (cols[0] !== META_PREFIX) {
+      break;
+    }
+
+    if (cols[1] === 'holidays') {
+      meta.holidays = normalizeHolidays(cols.slice(2));
+    }
+
+    index += 1;
+  }
+
+  return { meta, dataStartIndex: index };
 }
 
 function toTaskStatus(value: string): TaskStatus | null {
@@ -37,10 +91,16 @@ export function importTasksFromCsvText(csvText: string): TaskImportResult {
     .filter((line) => line.length > 0);
 
   if (lines.length === 0) {
-    return { validTasks, errors: [{ message: 'CSVが空です。' }] };
+    return { validTasks, meta: createDefaultTaskMeta(), errors: [{ message: 'CSVが空です。' }] };
   }
 
-  const headers = parseCsvLine(lines[0]);
+  const { meta, dataStartIndex } = parseMeta(lines);
+  const headerLine = lines[dataStartIndex];
+  if (!headerLine) {
+    return { validTasks, meta, errors: [{ message: 'タスクヘッダー行がありません。' }] };
+  }
+
+  const headers = parseCsvLine(headerLine);
 
   for (const requiredColumn of REQUIRED_COLUMNS) {
     if (!headers.includes(requiredColumn)) {
@@ -49,12 +109,12 @@ export function importTasksFromCsvText(csvText: string): TaskImportResult {
   }
 
   if (errors.length > 0) {
-    return { validTasks, errors };
+    return { validTasks, meta, errors };
   }
 
   const headerIndexMap = new Map(headers.map((header, index) => [header, index]));
 
-  for (let lineIndex = 1; lineIndex < lines.length; lineIndex += 1) {
+  for (let lineIndex = dataStartIndex + 1; lineIndex < lines.length; lineIndex += 1) {
     const cols = parseCsvLine(lines[lineIndex]);
     const lineNo = lineIndex + 1;
 
@@ -100,5 +160,5 @@ export function importTasksFromCsvText(csvText: string): TaskImportResult {
     validTasks.push(task);
   }
 
-  return { validTasks, errors };
+  return { validTasks, meta, errors };
 }

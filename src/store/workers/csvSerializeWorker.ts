@@ -1,3 +1,4 @@
+import { TaskMeta } from '../../domain/task/meta';
 import { Task } from '../../domain/task/types';
 
 const CSV_COLUMNS: Array<keyof Task> = [
@@ -18,6 +19,7 @@ const CSV_COLUMNS: Array<keyof Task> = [
 interface CsvSerializeRequest {
   id: number;
   tasks: Task[];
+  meta?: TaskMeta;
 }
 
 interface CsvSerializeSuccess {
@@ -33,7 +35,12 @@ function escapeCsvValue(value: string): string {
   return value;
 }
 
-function serializeTasksToCsv(tasks: Task[]): string {
+function normalizeHolidays(holidays: string[]): string[] {
+  const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+  return [...new Set(holidays.filter((holiday) => isoDatePattern.test(holiday)).sort())];
+}
+
+function serializeTasksToCsv(tasks: Task[], meta?: TaskMeta): string {
   const header = CSV_COLUMNS.join(',');
   const lines = tasks.map((task) =>
     CSV_COLUMNS.map((column) => {
@@ -42,14 +49,17 @@ function serializeTasksToCsv(tasks: Task[]): string {
     }).join(','),
   );
 
-  return [header, ...lines].join('\n');
+  const holidays = normalizeHolidays(meta?.holidays ?? []);
+  const metaLines = ['#meta,version,1', ['#meta', 'holidays', ...holidays].map(escapeCsvValue).join(',')];
+
+  return [...metaLines, header, ...lines].join('\n');
 }
 
 self.onmessage = (event: MessageEvent<CsvSerializeRequest>) => {
-  const { id, tasks } = event.data;
+  const { id, tasks, meta } = event.data;
   const response: CsvSerializeSuccess = {
     id,
-    csvText: serializeTasksToCsv(tasks),
+    csvText: serializeTasksToCsv(tasks, meta),
   };
 
   self.postMessage(response);
