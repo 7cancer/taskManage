@@ -5,8 +5,6 @@ on:
     branches:
       - main
       - dev
-    paths-ignore:
-      - 'release/taskManage-build.zip'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -28,13 +26,23 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
-          package-manager-cache: false
 
       - name: Install dependencies
         run: npm install
 
-      - name: Build release zip
+      - name: Build project
+        run: npm run build
+
+      - name: Create release zip
         run: npm run build:zip
+
+      - name: Upload build artifact
+        if: github.ref == 'refs/heads/dev'
+        uses: actions/upload-artifact@v4
+        with:
+          name: taskManage-build
+          path: release/taskManage-build.zip
+          retention-days: 14
 
       - name: Commit updated zip
         if: github.ref == 'refs/heads/main'

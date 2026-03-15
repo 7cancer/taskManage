@@ -9,7 +9,10 @@ ZIP_PATH="$RELEASE_DIR/taskManage-build.zip"
 
 cd "$ROOT_DIR"
 
-npm run build
+# Build if dist directory does not exist (CI runs build separately)
+if [ ! -d "$DIST_DIR" ]; then
+  npm run build
+fi
 
 if ! command -v zip >/dev/null 2>&1; then
   if command -v apk >/dev/null 2>&1; then
