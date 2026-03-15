@@ -1,3 +1,5 @@
+import { Button } from '../../../shared/ui/Button';
+
 interface TaskDeleteConfirmProps {
   taskName: string;
   onConfirm: () => void;
@@ -11,8 +13,8 @@ export function TaskDeleteConfirm({ taskName, onConfirm, onCancel }: TaskDeleteC
         「{taskName}」を削除します。子タスクも一緒に削除されます。
       </p>
       <div style={{ display: 'inline-flex', gap: 8 }}>
-        <button type="button" onClick={onCancel}>キャンセル</button>
-        <button type="button" onClick={onConfirm} style={{ color: '#b91c1c' }}>削除を実行</button>
+        <Button variant="secondary" size="sm" onClick={onCancel}>キャンセル</Button>
+        <Button variant="danger" size="sm" onClick={onConfirm}>削除を実行</Button>
       </div>
     </div>
   );
