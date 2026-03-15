@@ -63,6 +63,50 @@ export function calculateGanttLayout(tasks: Task[]): GanttLayout | null {
   };
 }
 
+export type GanttGroupBy = 'none' | 'project' | 'category';
+
+export interface GanttGroupSection {
+  groupLabel: string;
+  layout: GanttLayout;
+}
+
+export function calculateGroupedGanttLayout(
+  tasks: Task[],
+  groupBy: GanttGroupBy,
+): GanttGroupSection[] | null {
+  if (groupBy === 'none') return null;
+
+  const groups = new Map<string, Task[]>();
+  const UNSET_LABEL = '(未設定)';
+
+  for (const task of tasks) {
+    const key = (groupBy === 'project' ? task.project : task.category) || UNSET_LABEL;
+    const list = groups.get(key);
+    if (list) {
+      list.push(task);
+    } else {
+      groups.set(key, [task]);
+    }
+  }
+
+  const sections: GanttGroupSection[] = [];
+  const sortedKeys = [...groups.keys()].sort((a, b) => {
+    if (a === UNSET_LABEL) return 1;
+    if (b === UNSET_LABEL) return -1;
+    return a.localeCompare(b);
+  });
+
+  for (const key of sortedKeys) {
+    const groupTasks = groups.get(key)!;
+    const layout = calculateGanttLayout(groupTasks);
+    if (layout) {
+      sections.push({ groupLabel: key, layout });
+    }
+  }
+
+  return sections.length > 0 ? sections : null;
+}
+
 export function getDateOffsetDays(baseDate: Date, targetDate: Date): number {
   return dateDiffInDays(baseDate, targetDate);
 }
