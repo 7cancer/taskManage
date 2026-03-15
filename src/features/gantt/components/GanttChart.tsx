@@ -198,6 +198,7 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
   const [selectedStartDate, setSelectedStartDate] = useState<string>('');
   const [hideDoneTasks, setHideDoneTasks] = useState(false);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
+  const headerContentRef = useRef<HTMLDivElement | null>(null);
   const [timelineScrollLeft, setTimelineScrollLeft] = useState(0);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(0);
   const animationFrameRef = useRef<number | null>(null);
@@ -359,6 +360,12 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
 
   const handleTimelineScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
     const element = event.currentTarget;
+
+    // Sync header transform immediately (no rAF delay) to eliminate visual lag
+    if (headerContentRef.current) {
+      headerContentRef.current.style.transform = `translateX(-${element.scrollLeft}px)`;
+    }
+
     if (animationFrameRef.current !== null) {
       cancelAnimationFrame(animationFrameRef.current);
     }
@@ -952,7 +959,7 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
             タスク
           </div>
           <div style={{ height: GANTT_HEADER_HEIGHT, boxSizing: 'border-box', overflow: 'hidden' }}>
-            <div style={{ width: timelineWidth, transform: `translateX(-${timelineScrollLeft}px)` }}>
+            <div ref={headerContentRef} style={{ width: timelineWidth, transform: `translateX(-${timelineScrollLeft}px)` }}>
               <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, background: '#f8fafc' }}>
                 {monthSpans.map((month) => (
                   <div
