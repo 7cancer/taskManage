@@ -36,6 +36,14 @@ jobs:
       - name: Build release zip
         run: npm run build:zip
 
+      - name: Upload build artifact
+        if: github.ref == 'refs/heads/dev'
+        uses: actions/upload-artifact@v4
+        with:
+          name: taskManage-build
+          path: release/taskManage-build.zip
+          retention-days: 14
+
       - name: Commit updated zip
         if: github.ref == 'refs/heads/main'
         run: |
