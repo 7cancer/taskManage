@@ -9,6 +9,22 @@ import {
 } from '../../store/actions/taskPersistence';
 import { useTaskStore } from '../../store/taskStore';
 
+
+async function loadDefaultHolidayMeta() {
+  try {
+    const response = await fetch('/default-holidays.csv', { cache: 'no-store' });
+    if (!response.ok) {
+      return null;
+    }
+
+    const csvText = await response.text();
+    const parsed = parseTaskSnapshotFromCsvText(csvText);
+    return parsed.meta;
+  } catch {
+    return null;
+  }
+}
+
 export function StoreProvider({ children }: PropsWithChildren) {
   const tasks = useTaskStore((state) => state.tasks);
   const meta = useTaskStore((state) => state.meta);
@@ -16,20 +32,43 @@ export function StoreProvider({ children }: PropsWithChildren) {
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
-    const snapshot = loadSnapshotFromLocalStorage();
-    if (snapshot.tasks.length > 0 || snapshot.meta.holidays.length > 0) {
-      setSnapshot(snapshot.tasks, snapshot.meta);
-      setIsHydrated(true);
-      return;
+    let disposed = false;
+
+    async function hydrateStore() {
+      const snapshot = loadSnapshotFromLocalStorage();
+      if (snapshot.tasks.length > 0 || snapshot.meta.holidays.length > 0) {
+        if (!disposed) {
+          setSnapshot(snapshot.tasks, snapshot.meta);
+          setIsHydrated(true);
+        }
+        return;
+      }
+
+      const csvText = loadTasksCsvFromLocalStorage();
+      if (csvText) {
+        const fallbackSnapshot = parseTaskSnapshotFromCsvText(csvText);
+        if (!disposed) {
+          setSnapshot(fallbackSnapshot.tasks, fallbackSnapshot.meta);
+          setIsHydrated(true);
+        }
+        return;
+      }
+
+      const defaultMeta = await loadDefaultHolidayMeta();
+      if (!disposed && defaultMeta) {
+        setSnapshot([], defaultMeta);
+      }
+
+      if (!disposed) {
+        setIsHydrated(true);
+      }
     }
 
-    const csvText = loadTasksCsvFromLocalStorage();
-    if (csvText) {
-      const fallbackSnapshot = parseTaskSnapshotFromCsvText(csvText);
-      setSnapshot(fallbackSnapshot.tasks, fallbackSnapshot.meta);
-    }
+    void hydrateStore();
 
-    setIsHydrated(true);
+    return () => {
+      disposed = true;
+    };
   }, [setSnapshot]);
 
   useEffect(() => {

@@ -6,9 +6,10 @@ interface GanttRowTreeProps {
   taskName: string;
   depth: number;
   status: TaskStatus;
+  onTaskNameClick?: () => void;
 }
 
-export const GanttRowTree = memo(function GanttRowTree({ taskName, depth, status }: GanttRowTreeProps) {
+export const GanttRowTree = memo(function GanttRowTree({ taskName, depth, status, onTaskNameClick }: GanttRowTreeProps) {
   const statusLabel = TASK_STATUS_LABELS[status];
   const statusColor = TASK_STATUS_COLORS[status];
 
@@ -27,7 +28,9 @@ export const GanttRowTree = memo(function GanttRowTree({ taskName, depth, status
       }}
       title={taskName}
     >
-      <span
+      <button
+        type="button"
+        onClick={onTaskNameClick}
         style={{
           whiteSpace: 'nowrap',
           overflow: 'hidden',
@@ -37,11 +40,17 @@ export const GanttRowTree = memo(function GanttRowTree({ taskName, depth, status
           background: depth > 0 ? '#f1f5f9' : 'transparent',
           borderRadius: 4,
           padding: depth > 0 ? '2px 6px' : 0,
+          border: 'none',
+          textAlign: 'left',
+          font: 'inherit',
+          color: '#2563eb',
+          textDecoration: 'underline',
+          cursor: 'pointer',
         }}
       >
         {depth > 0 ? '\u2514 ' : ''}
         {taskName}
-      </span>
+      </button>
       <span
         style={{
           flexShrink: 0,
