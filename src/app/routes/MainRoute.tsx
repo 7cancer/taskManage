@@ -76,6 +76,7 @@ function createDummyProjectTasks(): Task[] {
       endDate: toDateText(addDays(base, 2)),
       project: '新規プロジェクトA',
       category: '計画',
+      description: '準備タスクです。\nスコープと体制を整理します。',
       displayOrder: 1,
     },
     {
@@ -87,6 +88,7 @@ function createDummyProjectTasks(): Task[] {
       endDate: toDateText(addDays(base, 7)),
       project: '新規プロジェクトA',
       category: '要件',
+      description: '要件ヒアリングを実施。\n成果物はConfluenceに記録。',
       displayOrder: 2,
     },
     {
@@ -97,6 +99,7 @@ function createDummyProjectTasks(): Task[] {
       endDate: toDateText(addDays(base, 12)),
       project: '新規プロジェクトA',
       category: '設計',
+      description: '基本設計レビューを実施し、\n懸念点を解消します。',
       displayOrder: 3,
     },
     {
@@ -107,6 +110,7 @@ function createDummyProjectTasks(): Task[] {
       endDate: toDateText(addDays(base, 20)),
       project: '新規プロジェクトA',
       category: '実装',
+      description: '実装フェーズ。\n優先度順にチケット消化。',
       displayOrder: 4,
     },
     {
@@ -117,6 +121,7 @@ function createDummyProjectTasks(): Task[] {
       endDate: toDateText(addDays(base, 22)),
       project: '新規プロジェクトA',
       category: 'リリース',
+      description: '本番反映と稼働確認。\n監視設定も最終確認。',
       displayOrder: 5,
     },
   ];
@@ -198,7 +203,12 @@ export function MainRoute() {
               ) : (
                 <ul style={{ marginTop: 0 }}>
                   {groupedTasks[status].map((task) => (
-                    <li key={task.taskId}>{formatTaskSummary(task)}</li>
+                    <li key={task.taskId}>
+                      <div>{formatTaskSummary(task)}</div>
+                      {task.description && (
+                        <div style={{ whiteSpace: 'pre-wrap', fontSize: 12, color: '#475569', marginTop: 2 }}>{task.description}</div>
+                      )}
+                    </li>
                   ))}
                 </ul>
               )}

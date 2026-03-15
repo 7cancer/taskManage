@@ -25,9 +25,8 @@ const STATUS_ICONS: Record<TaskStatus, string> = {
   done: '🟡',
 };
 
-function RequiredDot() {
-  return <span style={{ color: '#dc2626', marginLeft: 4, fontSize: 8, lineHeight: 1, verticalAlign: 'top' }}>●</span>;
-}
+const SYSTEM_RESERVED_CHARS_NOTICE = '使用禁止文字（ID系）: 「,」「"」「改行」';
+const SYSTEM_RESERVED_CHAR_PATTERN = /[,"\n\r]/;
 
 interface TaskModalProps {
   mode: 'create' | 'edit';
@@ -41,9 +40,18 @@ interface TaskModalProps {
 
 export function TaskModal({ mode, values, editingTask, onChange, onSave, onClose, onDelete }: TaskModalProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const hasInvalidIdChar = useMemo(
+    () => SYSTEM_RESERVED_CHAR_PATTERN.test(values.taskId) || SYSTEM_RESERVED_CHAR_PATTERN.test(values.parentTaskId),
+    [values.parentTaskId, values.taskId],
+  );
   const canSave = useMemo(
-    () => values.taskId.trim().length > 0 && values.taskName.trim().length > 0 && values.status !== '' && values.startDate !== '' && values.endDate !== '',
-    [values.endDate, values.startDate, values.status, values.taskId, values.taskName],
+    () => values.taskId.trim().length > 0
+      && values.taskName.trim().length > 0
+      && values.status !== ''
+      && values.startDate !== ''
+      && values.endDate !== ''
+      && !hasInvalidIdChar,
+    [hasInvalidIdChar, values.endDate, values.startDate, values.status, values.taskId, values.taskName],
   );
 
   function handleChange<K extends keyof TaskFormValues>(key: K) {
@@ -86,11 +94,11 @@ export function TaskModal({ mode, values, editingTask, onChange, onSave, onClose
                 <input style={{ width: '100%' }} value={values.project} onChange={handleChange('project')} />
               </label>
               <label>
-                <span>タスク名<RequiredDot /></span>
+                <span style={{ fontWeight: 700 }}>タスク名</span>
                 <input style={{ width: '100%' }} value={values.taskName} onChange={handleChange('taskName')} />
               </label>
               <label>
-                <span>ステータス<RequiredDot /></span>
+                <span style={{ fontWeight: 700 }}>ステータス</span>
                 <select
                   style={{
                     width: '100%',
@@ -111,11 +119,11 @@ export function TaskModal({ mode, values, editingTask, onChange, onSave, onClose
               </label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <label>
-                  <span>開始日<RequiredDot /></span>
+                  <span style={{ fontWeight: 700 }}>開始日</span>
                   <input type="date" style={{ width: '100%', padding: '6px 8px' }} value={values.startDate} onChange={handleChange('startDate')} />
                 </label>
                 <label>
-                  <span>終了日<RequiredDot /></span>
+                  <span style={{ fontWeight: 700 }}>終了日</span>
                   <input type="date" style={{ width: '100%', padding: '6px 8px' }} value={values.endDate} onChange={handleChange('endDate')} />
                 </label>
               </div>
@@ -127,6 +135,10 @@ export function TaskModal({ mode, values, editingTask, onChange, onSave, onClose
                 <span>説明</span>
                 <textarea style={{ width: '100%', minHeight: 120 }} value={values.description} onChange={handleChange('description')} />
               </label>
+              <p style={{ margin: '-6px 0 0', fontSize: 11, color: '#94a3b8' }}>説明文は改行を保持して保存されます。</p>
+              <p style={{ margin: '-10px 0 0', fontSize: 11, color: hasInvalidIdChar ? '#b45309' : '#94a3b8' }}>
+                {SYSTEM_RESERVED_CHARS_NOTICE}
+              </p>
             </div>
             <div style={{ marginTop: 18, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
               <div>
@@ -137,8 +149,8 @@ export function TaskModal({ mode, values, editingTask, onChange, onSave, onClose
                 )}
               </div>
               <div style={{ display: 'inline-flex', gap: 8 }}>
-                <Button variant="secondary" onClick={onClose} style={{ minWidth: 120 }}>キャンセル</Button>
-                <Button variant="primary" onClick={onSave} disabled={!canSave} style={{ minWidth: 120 }}>
+                <Button variant="secondary" onClick={onClose} style={{ minWidth: 120, justifyContent: 'center' }}>キャンセル</Button>
+                <Button variant="primary" onClick={onSave} disabled={!canSave} style={{ minWidth: 120, justifyContent: 'center' }}>
                   保存
                 </Button>
               </div>

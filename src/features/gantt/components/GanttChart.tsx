@@ -12,6 +12,8 @@ import { createTaskFromRightClick } from '../interactions/rightClickCreate';
 import { calculateGanttLayout, calculateGroupedGanttLayout, GanttGroupBy, getDateOffsetDays } from '../lib/ganttLayout';
 import { Button } from '../../../shared/ui/Button';
 
+const SYSTEM_RESERVED_CHAR_PATTERN = /[,"\n\r]/;
+
 interface GanttChartProps {
   tasks: Task[];
   holidays: string[];
@@ -768,6 +770,13 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
       return;
     }
 
+    if (SYSTEM_RESERVED_CHAR_PATTERN.test(normalizedTaskId) || (normalizedParentTaskId ? SYSTEM_RESERVED_CHAR_PATTERN.test(normalizedParentTaskId) : false)) {
+      return;
+    }
+
+    const normalizedDescription = taskForm.description.replace(/\r\n/g, '\n');
+    const description = normalizedDescription.trim().length > 0 ? normalizedDescription : undefined;
+
     const normalized = normalizeDateRange(taskForm.startDate, taskForm.endDate);
 
     if (editingTaskId) {
@@ -783,7 +792,7 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
         endDate: normalized.endDate,
         project: taskForm.project.trim() || undefined,
         category: taskForm.category.trim() || undefined,
-        description: taskForm.description.trim() || undefined,
+        description,
       });
     } else {
       const displayOrder = tasks.reduce((max, task) => Math.max(max, task.displayOrder), 0) + 1;
@@ -798,7 +807,7 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
         priority: undefined,
         project: taskForm.project.trim() || undefined,
         category: taskForm.category.trim() || undefined,
-        description: taskForm.description.trim() || undefined,
+        description,
         displayOrder,
       });
     }
