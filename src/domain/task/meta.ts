@@ -1,5 +1,7 @@
 export interface TaskMeta {
   holidays: string[];
+  projects: string[];
+  categories: string[];
 }
 
 export interface TaskSnapshot {
@@ -10,5 +12,7 @@ export interface TaskSnapshot {
 export function createDefaultTaskMeta(): TaskMeta {
   return {
     holidays: [],
+    projects: [],
+    categories: [],
   };
 }
