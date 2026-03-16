@@ -1,3 +1,5 @@
+import { DEFAULT_HOLIDAYS } from './defaultHolidays';
+
 export interface TaskMeta {
   holidays: string[];
   projects: string[];
@@ -11,7 +13,7 @@ export interface TaskSnapshot {
 
 export function createDefaultTaskMeta(): TaskMeta {
   return {
-    holidays: [],
+    holidays: [...DEFAULT_HOLIDAYS],
     projects: [],
     categories: [],
   };
