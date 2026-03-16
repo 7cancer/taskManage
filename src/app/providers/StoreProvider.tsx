@@ -8,22 +8,7 @@ import {
   saveTasksToCsvStorage,
 } from '../../store/actions/taskPersistence';
 import { useTaskStore } from '../../store/taskStore';
-
-
-async function loadDefaultHolidayMeta() {
-  try {
-    const response = await fetch('/default-holidays.csv', { cache: 'no-store' });
-    if (!response.ok) {
-      return null;
-    }
-
-    const csvText = await response.text();
-    const parsed = parseTaskSnapshotFromCsvText(csvText);
-    return parsed.meta;
-  } catch {
-    return null;
-  }
-}
+import { createDefaultTaskMeta } from '../../domain/task/meta';
 
 export function StoreProvider({ children }: PropsWithChildren) {
   const tasks = useTaskStore((state) => state.tasks);
@@ -34,7 +19,7 @@ export function StoreProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     let disposed = false;
 
-    async function hydrateStore() {
+    function hydrateStore() {
       const snapshot = loadSnapshotFromLocalStorage();
       if (snapshot.tasks.length > 0 || snapshot.meta.holidays.length > 0) {
         if (!disposed) {
@@ -54,17 +39,13 @@ export function StoreProvider({ children }: PropsWithChildren) {
         return;
       }
 
-      const defaultMeta = await loadDefaultHolidayMeta();
-      if (!disposed && defaultMeta) {
-        setSnapshot([], defaultMeta);
-      }
-
       if (!disposed) {
+        setSnapshot([], createDefaultTaskMeta());
         setIsHydrated(true);
       }
     }
 
-    void hydrateStore();
+    hydrateStore();
 
     return () => {
       disposed = true;
