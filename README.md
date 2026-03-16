@@ -3,6 +3,14 @@
 taskManage は、**ローカル完結・オフライン利用**を前提としたタスク管理 Web アプリです。  
 CSV の取り込み、ガント表示、一覧確認、ローカル保存を中心に、軽量にタスク管理を行えます。
 
+## サンプル画面
+
+クリスマスパーティの準備をガントチャートで管理している例です。
+
+![ガントチャート サンプル画面](docs/gantt-chart-sample.png)
+
+> サンプルデータ: [`samples/christmas-party-sample.csv`](samples/christmas-party-sample.csv)
+
 ## 特徴
 
 - ローカル CSV の取り込み
