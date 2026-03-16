@@ -11,6 +11,8 @@ interface TaskStoreState {
   upsertTasks: (tasks: Task[]) => void;
   removeTasksById: (taskIds: string[]) => void;
   setHolidays: (holidays: string[]) => void;
+  setProjects: (projects: string[]) => void;
+  setCategories: (categories: string[]) => void;
 }
 
 function buildTaskIndex(tasks: Task[]): Record<string, number> {
@@ -87,6 +89,24 @@ export const useTaskStore = create<TaskStoreState>((set) => ({
       meta: {
         ...state.meta,
         holidays,
+      },
+      taskIndexById: state.taskIndexById,
+    })),
+  setProjects: (projects) =>
+    set((state) => ({
+      tasks: state.tasks,
+      meta: {
+        ...state.meta,
+        projects,
+      },
+      taskIndexById: state.taskIndexById,
+    })),
+  setCategories: (categories) =>
+    set((state) => ({
+      tasks: state.tasks,
+      meta: {
+        ...state.meta,
+        categories,
       },
       taskIndexById: state.taskIndexById,
     })),

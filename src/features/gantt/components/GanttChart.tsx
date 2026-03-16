@@ -17,6 +17,8 @@ const SYSTEM_RESERVED_CHAR_PATTERN = /[,"\n\r]/;
 interface GanttChartProps {
   tasks: Task[];
   holidays: string[];
+  projects: string[];
+  categories: string[];
 }
 
 interface ContextMenuState {
@@ -195,7 +197,7 @@ const GROUP_BY_OPTIONS: { id: GanttGroupBy; label: string }[] = [
 
 const GROUP_HEADER_HEIGHT = 38;
 
-export function GanttChart({ tasks, holidays }: GanttChartProps) {
+export function GanttChart({ tasks, holidays, projects, categories }: GanttChartProps) {
   const layout = useMemo(() => calculateGanttLayout(tasks), [tasks]);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [selectedRangeId, setSelectedRangeId] = useState<string>('6m');
@@ -1018,123 +1020,99 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
         {isGrouped ? (
           <div
             ref={bodyScrollRef}
-            style={{ maxHeight: '70vh', overflowY: 'auto' }}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)`,
+              maxHeight: '70vh',
+              overflowY: 'auto',
+            }}
             onScroll={(event) => {
               setVerticalScrollTop(event.currentTarget.scrollTop);
             }}
           >
-            {groupedSections!.map((section) => {
-              const isCollapsed = collapsedGroups.has(section.groupLabel);
-              const sectionRows = isCollapsed
-                ? []
-                : section.layout.rows.filter((row) => !hiddenTaskIdSet.has(row.task.taskId));
-              const sectionContentHeight = sectionRows.length * GANTT_ROW_HEIGHT;
+            {/* Left column: task names (fixed, no horizontal scroll) */}
+            <div>
+              {groupedSections!.map((section) => {
+                const isCollapsed = collapsedGroups.has(section.groupLabel);
+                const sectionRows = isCollapsed
+                  ? []
+                  : section.layout.rows.filter((row) => !hiddenTaskIdSet.has(row.task.taskId));
+                const sectionContentHeight = sectionRows.length * GANTT_ROW_HEIGHT;
 
-              const sectionLeft: React.ReactNode[] = [];
-              const sectionRight: React.ReactNode[] = [];
-              if (!isCollapsed) {
-                for (let i = 0; i < sectionRows.length; i++) {
-                  const { task, depth, start } = sectionRows[i];
-                  const dragShift = dragShiftByTaskId.get(task.taskId) ?? 0;
-                  const isDragging = currentDragSnapshot.state?.affectedTaskIds.includes(task.taskId) ?? false;
-                  const isResizingRow = currentResizeSnapshot.state?.taskId === task.taskId;
-                  const resizeOffset = isResizingRow ? currentResizeSnapshot.offsetDays : 0;
-
-                  sectionLeft.push(
+                return (
+                  <div key={section.groupLabel} style={{ borderTop: '2px solid #cbd5e1' }}>
                     <div
-                      key={task.taskId}
-                      onContextMenu={(event) => handleRowContextMenu(event, task.taskId)}
+                      onClick={() => toggleGroupCollapse(section.groupLabel)}
                       style={{
-                        position: 'absolute',
-                        top: i * GANTT_ROW_HEIGHT,
-                        left: 0,
-                        right: 0,
                         display: 'flex',
                         alignItems: 'center',
-                        height: GANTT_ROW_HEIGHT,
-                        boxSizing: 'border-box',
-                        borderTop: '1px solid #f1f5f9',
+                        gap: 8,
+                        height: GROUP_HEADER_HEIGHT,
+                        padding: '0 12px',
+                        background: '#e2e8f0',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        fontSize: 14,
+                        userSelect: 'none',
                       }}
                     >
-                      <GanttRowTree taskName={task.taskName} depth={depth} status={task.status} onTaskNameClick={() => openEditModal(task)} />
-                    </div>,
-                  );
-
-                  sectionRight.push(
-                    <GanttTimelineRow
-                      key={task.taskId}
-                      task={task}
-                      depth={depth}
-                      start={start}
-                      viewStart={viewStart}
-                      visibleDays={visibleDays}
-                      dragShift={dragShift}
-                      isDragging={isDragging}
-                      resizeOffsetDays={resizeOffset}
-                      isResizing={isResizingRow}
-                      isParentTask={parentTaskIdSet.has(task.taskId)}
-                      ancestorHighlights={computeAncestorHighlights(task)}
-                      rowIndex={i}
-                      timelineScrollLeft={timelineScrollLeft}
-                      timelineViewportWidth={effectiveTimelineViewportWidth}
-                      onBarMouseDown={handleBarMouseDown}
-                      onResizeMouseDown={handleResizeHandleMouseDown}
-                      onBarClick={openEditModal}
-                      onContextMenu={handleTimelineRowContextMenu}
-                    />,
-                  );
-                }
-              }
-
-              return (
-                <div key={section.groupLabel} style={{ borderTop: '2px solid #cbd5e1' }}>
-                  <div
-                    onClick={() => toggleGroupCollapse(section.groupLabel)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      height: GROUP_HEADER_HEIGHT,
-                      padding: '0 12px',
-                      background: '#e2e8f0',
-                      cursor: 'pointer',
-                      fontWeight: 600,
-                      fontSize: 14,
-                      userSelect: 'none',
-                      position: 'sticky',
-                      top: 0,
-                      zIndex: 10,
-                    }}
-                  >
-                    <span style={{
-                      display: 'inline-block',
-                      transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.15s',
-                      fontSize: 12,
-                    }}>
-                      ▼
-                    </span>
-                    <span>{groupBy === 'project' ? 'PJ' : 'Cat'}: {section.groupLabel}</span>
-                    <span style={{ fontWeight: 400, fontSize: 12, color: '#64748b' }}>
-                      ({section.layout.rows.length}件)
-                    </span>
-                  </div>
-                  {!isCollapsed && (
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: `${LEFT_COLUMN_WIDTH}px minmax(0, 1fr)`,
-                      }}
-                    >
+                      <span style={{
+                        display: 'inline-block',
+                        transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.15s',
+                        fontSize: 12,
+                      }}>
+                        ▼
+                      </span>
+                      <span>{groupBy === 'project' ? 'PJ' : 'Cat'}: {section.groupLabel}</span>
+                      <span style={{ fontWeight: 400, fontSize: 12, color: '#64748b' }}>
+                        ({section.layout.rows.length}件)
+                      </span>
+                    </div>
+                    {!isCollapsed && (
                       <div style={{ position: 'relative', height: sectionContentHeight }}>
-                        {sectionLeft}
+                        {sectionRows.map((row, i) => (
+                          <div
+                            key={row.task.taskId}
+                            onContextMenu={(event) => handleRowContextMenu(event, row.task.taskId)}
+                            style={{
+                              position: 'absolute',
+                              top: i * GANTT_ROW_HEIGHT,
+                              left: 0,
+                              right: 0,
+                              display: 'flex',
+                              alignItems: 'center',
+                              height: GANTT_ROW_HEIGHT,
+                              boxSizing: 'border-box',
+                              borderTop: '1px solid #f1f5f9',
+                            }}
+                          >
+                            <GanttRowTree taskName={row.task.taskName} depth={row.depth} status={row.task.status} onTaskNameClick={() => openEditModal(row.task)} />
+                          </div>
+                        ))}
                       </div>
-                      <div
-                        ref={section.groupLabel === groupedSections![0].groupLabel ? timelineScrollRef : undefined}
-                        onScroll={section.groupLabel === groupedSections![0].groupLabel ? handleTimelineScroll : undefined}
-                        style={{ overflowX: 'auto' }}
-                      >
-                        <div style={{ width: timelineWidth, position: 'relative', height: sectionContentHeight }}>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Right column: timeline (single horizontal scroll for all groups) */}
+            <div ref={timelineScrollRef} onScroll={handleTimelineScroll} style={{ overflowX: 'auto' }}>
+              <div style={{ width: timelineWidth }}>
+                {groupedSections!.map((section) => {
+                  const isCollapsed = collapsedGroups.has(section.groupLabel);
+                  const sectionRows = isCollapsed
+                    ? []
+                    : section.layout.rows.filter((row) => !hiddenTaskIdSet.has(row.task.taskId));
+                  const sectionContentHeight = sectionRows.length * GANTT_ROW_HEIGHT;
+
+                  return (
+                    <div key={section.groupLabel} style={{ borderTop: '2px solid #cbd5e1' }}>
+                      {/* Group header placeholder to match left column height */}
+                      <div style={{ height: GROUP_HEADER_HEIGHT, background: '#e2e8f0' }} />
+                      {!isCollapsed && (
+                        <div style={{ position: 'relative', height: sectionContentHeight }}>
                           <GanttGridBackground
                             visibleDays={visibleDays}
                             dayColumnWidth={DAY_COLUMN_WIDTH}
@@ -1145,14 +1123,43 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
                             isTodayCell={isTodayCell}
                             isHolidayCell={isHolidayCell}
                           />
-                          {sectionRight}
+                          {sectionRows.map((row, i) => {
+                            const dragShift = dragShiftByTaskId.get(row.task.taskId) ?? 0;
+                            const isDragging = currentDragSnapshot.state?.affectedTaskIds.includes(row.task.taskId) ?? false;
+                            const isResizingRow = currentResizeSnapshot.state?.taskId === row.task.taskId;
+                            const resizeOffset = isResizingRow ? currentResizeSnapshot.offsetDays : 0;
+
+                            return (
+                              <GanttTimelineRow
+                                key={row.task.taskId}
+                                task={row.task}
+                                depth={row.depth}
+                                start={row.start}
+                                viewStart={viewStart}
+                                visibleDays={visibleDays}
+                                dragShift={dragShift}
+                                isDragging={isDragging}
+                                resizeOffsetDays={resizeOffset}
+                                isResizing={isResizingRow}
+                                isParentTask={parentTaskIdSet.has(row.task.taskId)}
+                                ancestorHighlights={computeAncestorHighlights(row.task)}
+                                rowIndex={i}
+                                timelineScrollLeft={timelineScrollLeft}
+                                timelineViewportWidth={effectiveTimelineViewportWidth}
+                                onBarMouseDown={handleBarMouseDown}
+                                onResizeMouseDown={handleResizeHandleMouseDown}
+                                onBarClick={openEditModal}
+                                onContextMenu={handleTimelineRowContextMenu}
+                              />
+                            );
+                          })}
                         </div>
-                      </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            </div>
           </div>
         ) : (
           <div
@@ -1200,6 +1207,8 @@ export function GanttChart({ tasks, holidays }: GanttChartProps) {
           mode={editingTaskId ? 'edit' : 'create'}
           values={taskForm}
           editingTask={editingTaskId ? taskById.get(editingTaskId) : undefined}
+          projects={projects}
+          categories={categories}
           onChange={handleTaskFormChange}
           onSave={handleSaveTask}
           onDelete={editingTaskId ? handleDeleteTask : undefined}

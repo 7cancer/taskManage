@@ -11,6 +11,7 @@ import { TabItem, Tabs } from '../../shared/ui/Tabs';
 import { MainLayout } from '../layout/MainLayout';
 import { Sidebar, SidebarSection } from '../../shared/ui/Sidebar';
 import { Button } from '../../shared/ui/Button';
+import { ListManager } from '../../shared/ui/ListManager';
 
 const LIST_STYLE: CSSProperties = { padding: 12, background: '#fff', borderRadius: 8 };
 
@@ -153,8 +154,26 @@ export function MainRoute() {
   const tasks = useTaskStore((state) => state.tasks);
   const setTasks = useTaskStore((state) => state.setTasks);
   const holidays = useTaskStore((state) => state.meta.holidays);
+  const projects = useTaskStore((state) => state.meta.projects);
+  const categories = useTaskStore((state) => state.meta.categories);
+  const setProjects = useTaskStore((state) => state.setProjects);
+  const setCategories = useTaskStore((state) => state.setCategories);
   const groupedTasks = useMemo(() => groupTasksByStatus(tasks), [tasks]);
   const [activeView, setActiveView] = useState<ViewTab>('gantt');
+
+  function handleUpdateProjects(nextProjects: string[]) {
+    setProjects(nextProjects);
+    const { tasks: currentTasks, meta } = useTaskStore.getState();
+    saveSnapshotToLocalStorage(currentTasks, meta);
+    saveTasksToCsvStorage(currentTasks, meta);
+  }
+
+  function handleUpdateCategories(nextCategories: string[]) {
+    setCategories(nextCategories);
+    const { tasks: currentTasks, meta } = useTaskStore.getState();
+    saveSnapshotToLocalStorage(currentTasks, meta);
+    saveTasksToCsvStorage(currentTasks, meta);
+  }
 
   function handleCreateProject() {
     const dummyTasks = createDummyProjectTasks();
@@ -173,7 +192,13 @@ export function MainRoute() {
       <SidebarSection title="休日管理">
         <HolidayManager />
       </SidebarSection>
-      <SidebarSection title="プロジェクト">
+      <SidebarSection title="プロジェクト管理">
+        <ListManager title="プロジェクト" items={projects} onUpdate={handleUpdateProjects} />
+      </SidebarSection>
+      <SidebarSection title="カテゴリ管理">
+        <ListManager title="カテゴリ" items={categories} onUpdate={handleUpdateCategories} />
+      </SidebarSection>
+      <SidebarSection title="サンプルデータ">
         <Button variant="secondary" size="sm" onClick={handleCreateProject} style={{ width: '100%' }}>
           サンプル作成
         </Button>
@@ -189,7 +214,7 @@ export function MainRoute() {
       <Tabs items={VIEW_TABS} activeId={activeView} onChange={(id) => setActiveView(id as ViewTab)} />
 
       {activeView === 'gantt' ? (
-        <GanttChart tasks={tasks} holidays={holidays} />
+        <GanttChart tasks={tasks} holidays={holidays} projects={projects} categories={categories} />
       ) : (
         <section style={LIST_STYLE}>
           <h2 style={{ marginTop: 0 }}>読込済みタスク（簡易一覧）</h2>

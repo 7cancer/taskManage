@@ -114,9 +114,16 @@ export function serializeTasksToCsv(tasks: Task[], meta: TaskMeta = createDefaul
 
   const normalizedMeta: TaskMeta = {
     holidays: normalizeHolidays(meta.holidays),
+    projects: [...meta.projects],
+    categories: [...meta.categories],
   };
 
-  const metaLines = ['#meta,version,1', ['#meta', 'holidays', ...normalizedMeta.holidays].map(escapeCsvValue).join(',')];
+  const metaLines = [
+    '#meta,version,1',
+    ['#meta', 'holidays', ...normalizedMeta.holidays].map(escapeCsvValue).join(','),
+    ['#meta', 'projects', ...normalizedMeta.projects].map(escapeCsvValue).join(','),
+    ['#meta', 'categories', ...normalizedMeta.categories].map(escapeCsvValue).join(','),
+  ];
   return [...metaLines, header, ...lines].join('\n');
 }
 
@@ -144,6 +151,8 @@ export function parseTaskSnapshotFromCsvText(csvText: string): TaskSnapshot {
     tasks: importResult.validTasks,
     meta: {
       holidays: normalizeHolidays(importResult.meta.holidays),
+      projects: importResult.meta.projects,
+      categories: importResult.meta.categories,
     },
   };
 }
@@ -197,6 +206,8 @@ export function saveSnapshotToLocalStorage(tasks: Task[], meta: TaskMeta) {
     tasks,
     meta: {
       holidays: normalizeHolidays(meta.holidays),
+      projects: meta.projects,
+      categories: meta.categories,
     },
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
@@ -217,6 +228,8 @@ export function loadSnapshotFromLocalStorage(): TaskSnapshot {
     tasks: parsed.tasks ?? [],
     meta: {
       holidays: normalizeHolidays(parsed.meta?.holidays ?? []),
+      projects: parsed.meta?.projects ?? [],
+      categories: parsed.meta?.categories ?? [],
     },
   };
 }
