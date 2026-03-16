@@ -50,7 +50,14 @@ function serializeTasksToCsv(tasks: Task[], meta?: TaskMeta): string {
   );
 
   const holidays = normalizeHolidays(meta?.holidays ?? []);
-  const metaLines = ['#meta,version,1', ['#meta', 'holidays', ...holidays].map(escapeCsvValue).join(',')];
+  const projects = meta?.projects ?? [];
+  const categories = meta?.categories ?? [];
+  const metaLines = [
+    '#meta,version,1',
+    ['#meta', 'holidays', ...holidays].map(escapeCsvValue).join(','),
+    ['#meta', 'projects', ...projects].map(escapeCsvValue).join(','),
+    ['#meta', 'categories', ...categories].map(escapeCsvValue).join(','),
+  ];
 
   return [...metaLines, header, ...lines].join('\n');
 }

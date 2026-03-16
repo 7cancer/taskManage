@@ -59,6 +59,10 @@ function parseMeta(lines: string[]): { meta: TaskMeta; dataStartIndex: number } 
 
     if (cols[1] === 'holidays') {
       meta.holidays = normalizeHolidays(cols.slice(2));
+    } else if (cols[1] === 'projects') {
+      meta.projects = cols.slice(2).filter((v) => v.length > 0);
+    } else if (cols[1] === 'categories') {
+      meta.categories = cols.slice(2).filter((v) => v.length > 0);
     }
 
     index += 1;
