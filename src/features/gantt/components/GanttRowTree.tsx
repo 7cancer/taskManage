@@ -6,10 +6,21 @@ interface GanttRowTreeProps {
   taskName: string;
   depth: number;
   status: TaskStatus;
+  hasChildren?: boolean;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
   onTaskNameClick?: () => void;
 }
 
-export const GanttRowTree = memo(function GanttRowTree({ taskName, depth, status, onTaskNameClick }: GanttRowTreeProps) {
+export const GanttRowTree = memo(function GanttRowTree({
+  taskName,
+  depth,
+  status,
+  hasChildren = false,
+  isCollapsed = false,
+  onToggleCollapse,
+  onTaskNameClick,
+}: GanttRowTreeProps) {
   const statusLabel = TASK_STATUS_LABELS[status];
   const statusColor = TASK_STATUS_COLORS[status];
 
@@ -28,6 +39,28 @@ export const GanttRowTree = memo(function GanttRowTree({ taskName, depth, status
       }}
       title={taskName}
     >
+      {hasChildren ? (
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          aria-label={isCollapsed ? '子タスクを展開' : '子タスクを折りたたむ'}
+          style={{
+            border: 'none',
+            background: 'transparent',
+            cursor: 'pointer',
+            color: '#334155',
+            fontSize: 12,
+            padding: 0,
+            width: 16,
+            height: 16,
+            flexShrink: 0,
+          }}
+        >
+          {isCollapsed ? '▶' : '▼'}
+        </button>
+      ) : (
+        <span style={{ width: 16, flexShrink: 0 }} />
+      )}
       <button
         type="button"
         onClick={onTaskNameClick}
