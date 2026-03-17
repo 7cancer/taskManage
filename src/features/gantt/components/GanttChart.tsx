@@ -70,7 +70,7 @@ const VIEW_RANGE_OPTIONS: ViewRangeOption[] = [
 ];
 
 const GANTT_ROW_HEIGHT = 46;
-const GANTT_HEADER_HEIGHT = 50;
+const GANTT_HEADER_HEIGHT = 68;
 const VIRTUALIZATION_OVERSCAN = 5;
 
 function formatLabel(date: Date): string {
@@ -127,6 +127,17 @@ function shiftDateLabel(dateLabel: string, offsetDays: number): string {
 
 function isTodayCell(date: Date): boolean {
   return formatLabel(date) === getJstDateLabel();
+}
+
+function getWeekdayLabelJa(date: Date): string {
+  return ['日', '月', '火', '水', '木', '金', '土'][date.getDay()] ?? '';
+}
+
+function getWeekdayTextColor(date: Date): string {
+  const day = date.getDay();
+  if (day === 0) return '#dc2626';
+  if (day === 6) return '#2563eb';
+  return '#475569';
 }
 
 function clamp(number: number, min: number, max: number): number {
@@ -1071,8 +1082,23 @@ export function GanttChart({ tasks, holidays, projects, categories }: GanttChart
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: `repeat(${visibleDays}, ${DAY_COLUMN_WIDTH}px)`, borderTop: '1px solid #e2e8f0' }}>
                 {dayDates.map((date, index) => (
-                  <div key={index} style={{ textAlign: 'center', padding: '2px 0', borderLeft: index === 0 ? 'none' : `1px solid ${monthBoundaryIndexSet.has(index) ? '#cbd5e1' : '#e2e8f0'}`, background: isTodayCell(date) ? '#fed7aa' : isHolidayCell(date) ? '#e5e7eb' : '#f8fafc', fontSize: 12 }}>
-                    {date.getDate()}
+                  <div
+                    key={index}
+                    style={{
+                      textAlign: 'center',
+                      padding: '2px 0 3px',
+                      borderLeft: index === 0 ? 'none' : `1px solid ${monthBoundaryIndexSet.has(index) ? '#cbd5e1' : '#e2e8f0'}`,
+                      background: isTodayCell(date) ? '#fed7aa' : isHolidayCell(date) ? '#e5e7eb' : '#f8fafc',
+                      fontSize: 12,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      lineHeight: 1.15,
+                      gap: 4,
+                    }}
+                  >
+                    <span>{date.getDate()}</span>
+                    <span style={{ fontSize: 11, color: getWeekdayTextColor(date) }}>{getWeekdayLabelJa(date)}</span>
                   </div>
                 ))}
               </div>
