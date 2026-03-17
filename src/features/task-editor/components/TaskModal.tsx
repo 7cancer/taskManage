@@ -34,13 +34,25 @@ interface TaskModalProps {
   editingTask?: Task;
   projects: string[];
   categories: string[];
+  lockProjectAndCategory?: boolean;
   onChange: <K extends keyof TaskFormValues>(key: K, value: TaskFormValues[K]) => void;
   onSave: () => void;
   onClose: () => void;
   onDelete?: () => void;
 }
 
-export function TaskModal({ mode, values, editingTask, projects, categories, onChange, onSave, onClose, onDelete }: TaskModalProps) {
+export function TaskModal({
+  mode,
+  values,
+  editingTask,
+  projects,
+  categories,
+  lockProjectAndCategory = false,
+  onChange,
+  onSave,
+  onClose,
+  onDelete,
+}: TaskModalProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const hasInvalidIdChar = useMemo(
     () => SYSTEM_RESERVED_CHAR_PATTERN.test(values.taskId) || SYSTEM_RESERVED_CHAR_PATTERN.test(values.parentTaskId),
@@ -93,7 +105,12 @@ export function TaskModal({ mode, values, editingTask, projects, categories, onC
               </label>
               <label>
                 <span>プロジェクト</span>
-                <select style={{ width: '100%' }} value={values.project} onChange={handleChange('project')}>
+                <select
+                  style={{ width: '100%', background: lockProjectAndCategory ? '#e2e8f0' : '#fff', color: '#334155' }}
+                  value={values.project}
+                  onChange={handleChange('project')}
+                  disabled={lockProjectAndCategory}
+                >
                   <option value="">（未設定）</option>
                   {projects.map((p) => (
                     <option key={p} value={p}>{p}</option>
@@ -136,7 +153,12 @@ export function TaskModal({ mode, values, editingTask, projects, categories, onC
               </div>
               <label>
                 <span>カテゴリ</span>
-                <select style={{ width: '100%' }} value={values.category} onChange={handleChange('category')}>
+                <select
+                  style={{ width: '100%', background: lockProjectAndCategory ? '#e2e8f0' : '#fff', color: '#334155' }}
+                  value={values.category}
+                  onChange={handleChange('category')}
+                  disabled={lockProjectAndCategory}
+                >
                   <option value="">（未設定）</option>
                   {categories.map((c) => (
                     <option key={c} value={c}>{c}</option>
