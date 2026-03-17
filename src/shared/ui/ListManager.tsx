@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button } from './Button';
+import { Modal } from './Modal';
 
 interface ListManagerProps {
   title: string;
@@ -9,6 +10,7 @@ interface ListManagerProps {
 
 export function ListManager({ title, items, onUpdate }: ListManagerProps) {
   const [newItem, setNewItem] = useState('');
+  const [pendingDeleteItem, setPendingDeleteItem] = useState<string | null>(null);
 
   function handleAdd() {
     const trimmed = newItem.trim();
@@ -21,6 +23,7 @@ export function ListManager({ title, items, onUpdate }: ListManagerProps) {
 
   function handleDelete(target: string) {
     onUpdate(items.filter((item) => item !== target));
+    setPendingDeleteItem(null);
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -67,12 +70,41 @@ export function ListManager({ title, items, onUpdate }: ListManagerProps) {
               }}
             >
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item}</span>
-              <Button variant="danger" size="sm" onClick={() => handleDelete(item)} style={{ flexShrink: 0, padding: '2px 6px', fontSize: 11 }}>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => setPendingDeleteItem(item)}
+                style={{ flexShrink: 0, padding: '2px 6px', fontSize: 11 }}
+              >
                 削除
               </Button>
             </li>
           ))}
         </ul>
+      )}
+
+      {pendingDeleteItem && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.35)', display: 'grid', placeItems: 'center', zIndex: 2000 }}
+          onClick={() => setPendingDeleteItem(null)}
+        >
+          <div onClick={(e) => e.stopPropagation()}>
+            <Modal>
+              <div style={{ background: '#fff', width: 'min(420px, 92vw)', borderRadius: 12, padding: 24 }}>
+                <h3 style={{ marginTop: 0 }}>確認</h3>
+                <p style={{ marginTop: 0 }}>「{pendingDeleteItem}」を本当に削除しますか？</p>
+                <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <Button variant="secondary" onClick={() => setPendingDeleteItem(null)}>
+                    キャンセル
+                  </Button>
+                  <Button variant="danger" onClick={() => handleDelete(pendingDeleteItem)}>
+                    削除
+                  </Button>
+                </div>
+              </div>
+            </Modal>
+          </div>
+        </div>
       )}
     </div>
   );
