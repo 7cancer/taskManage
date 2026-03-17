@@ -237,6 +237,7 @@ export function GanttChart({ tasks, holidays, projects, categories }: GanttChart
   const [hideDoneTasks, setHideDoneTasks] = useState(false);
   const [groupBy, setGroupBy] = useState<GanttGroupBy>('none');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [collapsedParentTaskIds, setCollapsedParentTaskIds] = useState<Set<string>>(new Set());
 
   const groupedSections = useMemo(
     () => calculateGroupedGanttLayout(tasks, groupBy),
@@ -323,11 +324,18 @@ export function GanttChart({ tasks, holidays, projects, categories }: GanttChart
   }, [tasks]);
 
   const hiddenTaskIdSet = useMemo(() => {
+    const hiddenTaskIds = new Set<string>();
+
+    collapsedParentTaskIds.forEach((taskId) => {
+      collectDescendantTaskIds(taskId, childrenByParentId).forEach((descendantTaskId) => {
+        hiddenTaskIds.add(descendantTaskId);
+      });
+    });
+
     if (!hideDoneTasks) {
-      return new Set<string>();
+      return hiddenTaskIds;
     }
 
-    const hiddenTaskIds = new Set<string>();
     tasks.forEach((task) => {
       if (task.status !== 'done') return;
 
@@ -338,7 +346,7 @@ export function GanttChart({ tasks, holidays, projects, categories }: GanttChart
     });
 
     return hiddenTaskIds;
-  }, [childrenByParentId, hideDoneTasks, tasks]);
+  }, [childrenByParentId, collapsedParentTaskIds, hideDoneTasks, tasks]);
 
   useEffect(() => {
     if (!layout) return;
@@ -366,6 +374,18 @@ export function GanttChart({ tasks, holidays, projects, categories }: GanttChart
       resizeObserver.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    setCollapsedParentTaskIds((prev) => {
+      const next = new Set<string>();
+      prev.forEach((taskId) => {
+        if (childrenByParentId.has(taskId)) {
+          next.add(taskId);
+        }
+      });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [childrenByParentId]);
 
   useEffect(() => {
     const element = timelineScrollRef.current;
@@ -757,6 +777,18 @@ export function GanttChart({ tasks, holidays, projects, categories }: GanttChart
     setCollapsedGroups(new Set());
   }
 
+  function toggleParentTaskCollapse(taskId: string) {
+    setCollapsedParentTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
+      }
+      return next;
+    });
+  }
+
   function toggleGroupCollapse(groupLabel: string) {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
@@ -942,7 +974,15 @@ export function GanttChart({ tasks, holidays, projects, categories }: GanttChart
             borderTop: '1px solid #f1f5f9',
           }}
         >
-          <GanttRowTree taskName={task.taskName} depth={depth} status={task.status} onTaskNameClick={() => openEditModal(task)} />
+          <GanttRowTree
+            taskName={task.taskName}
+            depth={depth}
+            status={task.status}
+            hasChildren={parentTaskIdSet.has(task.taskId)}
+            isCollapsed={collapsedParentTaskIds.has(task.taskId)}
+            onToggleCollapse={() => toggleParentTaskCollapse(task.taskId)}
+            onTaskNameClick={() => openEditModal(task)}
+          />
         </div>,
       );
 
@@ -1129,7 +1169,16 @@ export function GanttChart({ tasks, holidays, projects, categories }: GanttChart
                 const sectionContentHeight = sectionRows.length * GANTT_ROW_HEIGHT;
 
                 return (
-                  <div key={section.groupLabel} style={{ borderTop: '2px solid #cbd5e1' }}>
+                  <div
+                    key={section.groupLabel}
+                    style={{
+                      marginTop: 12,
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 8,
+                      overflow: 'hidden',
+                      background: '#fff',
+                    }}
+                  >
                     <div
                       onClick={() => toggleGroupCollapse(section.groupLabel)}
                       style={{
@@ -1176,7 +1225,15 @@ export function GanttChart({ tasks, holidays, projects, categories }: GanttChart
                               borderTop: '1px solid #f1f5f9',
                             }}
                           >
-                            <GanttRowTree taskName={row.task.taskName} depth={row.depth} status={row.task.status} onTaskNameClick={() => openEditModal(row.task)} />
+                            <GanttRowTree
+                              taskName={row.task.taskName}
+                              depth={row.depth}
+                              status={row.task.status}
+                              hasChildren={parentTaskIdSet.has(row.task.taskId)}
+                              isCollapsed={collapsedParentTaskIds.has(row.task.taskId)}
+                              onToggleCollapse={() => toggleParentTaskCollapse(row.task.taskId)}
+                              onTaskNameClick={() => openEditModal(row.task)}
+                            />
                           </div>
                         ))}
                       </div>
@@ -1197,7 +1254,16 @@ export function GanttChart({ tasks, holidays, projects, categories }: GanttChart
                   const sectionContentHeight = sectionRows.length * GANTT_ROW_HEIGHT;
 
                   return (
-                    <div key={section.groupLabel} style={{ borderTop: '2px solid #cbd5e1' }}>
+                    <div
+                      key={section.groupLabel}
+                      style={{
+                        marginTop: 12,
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 8,
+                        overflow: 'hidden',
+                        background: '#fff',
+                      }}
+                    >
                       {/* Group header placeholder to match left column height */}
                       <div style={{ height: GROUP_HEADER_HEIGHT, background: '#e2e8f0' }} />
                       {!isCollapsed && (
