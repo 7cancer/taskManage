@@ -23,6 +23,8 @@ export const GanttRowTree = memo(function GanttRowTree({
 }: GanttRowTreeProps) {
   const statusLabel = TASK_STATUS_LABELS[status];
   const statusColor = TASK_STATUS_COLORS[status];
+  const isParentTask = hasChildren && depth === 0;
+  const isChildTask = depth > 0;
 
   return (
     <div
@@ -36,6 +38,8 @@ export const GanttRowTree = memo(function GanttRowTree({
         padding: '0 10px',
         paddingLeft: 10 + depth * 20,
         fontSize: 13,
+        borderRadius: 6,
+        background: isParentTask ? '#f8fafc' : 'transparent',
       }}
       title={taskName}
     >
@@ -45,15 +49,18 @@ export const GanttRowTree = memo(function GanttRowTree({
           onClick={onToggleCollapse}
           aria-label={isCollapsed ? '子タスクを展開' : '子タスクを折りたたむ'}
           style={{
-            border: 'none',
-            background: 'transparent',
+            border: '1px solid #cbd5e1',
+            background: isParentTask ? '#ffffff' : '#f8fafc',
             cursor: 'pointer',
             color: '#334155',
-            fontSize: 12,
+            fontSize: 10,
             padding: 0,
-            width: 16,
-            height: 16,
+            width: 18,
+            height: 18,
+            borderRadius: 999,
             flexShrink: 0,
+            lineHeight: 1,
+            fontWeight: 700,
           }}
         >
           {isCollapsed ? '▶' : '▼'}
@@ -70,18 +77,19 @@ export const GanttRowTree = memo(function GanttRowTree({
           textOverflow: 'ellipsis',
           minWidth: 0,
           flex: 1,
-          background: depth > 0 ? '#f1f5f9' : 'transparent',
+          background: isChildTask ? '#f1f5f9' : isParentTask ? '#e2e8f0' : 'transparent',
           borderRadius: 4,
-          padding: depth > 0 ? '2px 6px' : 0,
+          padding: isChildTask ? '2px 6px' : isParentTask ? '3px 8px' : 0,
           border: 'none',
           textAlign: 'left',
           font: 'inherit',
           color: '#2563eb',
-          textDecoration: 'underline',
+          textDecoration: isParentTask ? 'none' : 'underline',
           cursor: 'pointer',
+          fontWeight: isParentTask ? 700 : 500,
         }}
       >
-        {depth > 0 ? '\u2514 ' : ''}
+        {isChildTask ? '\u2514 ' : ''}
         {taskName}
       </button>
       <span
