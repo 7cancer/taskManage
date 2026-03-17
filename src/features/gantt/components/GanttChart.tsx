@@ -142,6 +142,27 @@ function normalizeDateRange(startDate: string, endDate: string): { startDate: st
 }
 
 
+
+function resolveInheritedProjectAndCategory(
+  parentTaskId: string | undefined,
+  fallback: { project: string; category: string },
+  taskById: Map<string, Task>,
+): { project: string; category: string } {
+  if (!parentTaskId) {
+    return fallback;
+  }
+
+  const parentTask = taskById.get(parentTaskId);
+  if (!parentTask) {
+    return fallback;
+  }
+
+  return {
+    project: parentTask.project ?? '',
+    category: parentTask.category ?? '',
+  };
+}
+
 function buildInitialTaskForm(task?: Task): TaskFormValues {
   if (task) {
     return {
@@ -257,6 +278,25 @@ export function GanttChart({ tasks, holidays, projects, categories }: GanttChart
 
   const selectedOption = VIEW_RANGE_OPTIONS.find((item) => item.id === selectedRangeId) ?? VIEW_RANGE_OPTIONS[1];
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.taskId, task])), [tasks]);
+  const editingParentTask = useMemo(
+    () => (taskForm.parentTaskId ? taskById.get(taskForm.parentTaskId) : undefined),
+    [taskById, taskForm.parentTaskId],
+  );
+  const isProjectAndCategoryLocked = Boolean(editingParentTask);
+  const modalFormValues = useMemo(() => {
+    if (!isProjectAndCategoryLocked) {
+      return taskForm;
+    }
+
+    return {
+      ...taskForm,
+      ...resolveInheritedProjectAndCategory(
+        taskForm.parentTaskId.trim() || undefined,
+        { project: taskForm.project, category: taskForm.category },
+        taskById,
+      ),
+    };
+  }, [isProjectAndCategoryLocked, taskById, taskForm]);
   const parentTaskIdSet = useMemo(() => new Set(tasks.flatMap((task) => (task.parentTaskId ? [task.parentTaskId] : []))), [tasks]);
   const childrenByParentId = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -738,13 +778,16 @@ export function GanttChart({ tasks, holidays, projects, categories }: GanttChart
   function handleCreateTask() {
     if (!contextMenu) return;
 
-    addTask(
-      createTaskFromRightClick({
-        clickedDate: contextMenu.clickedDate,
-        parentTaskId: contextMenu.parentTaskId,
-        tasks,
-      }),
-    );
+    const createdTask = createTaskFromRightClick({
+      clickedDate: contextMenu.clickedDate,
+      parentTaskId: contextMenu.parentTaskId,
+      tasks,
+    });
+
+    addTask(createdTask);
+    setTaskForm(buildInitialTaskForm(createdTask));
+    setEditingTaskId(createdTask.taskId);
+    setIsCreateModalOpen(false);
     setContextMenu(null);
   }
 
@@ -755,6 +798,7 @@ export function GanttChart({ tasks, holidays, projects, categories }: GanttChart
   function handleSaveTask() {
     const normalizedTaskId = taskForm.taskId.trim();
     const normalizedParentTaskId = taskForm.parentTaskId.trim() || undefined;
+    const inheritedParentTask = normalizedParentTaskId ? taskById.get(normalizedParentTaskId) : undefined;
 
     if (!normalizedTaskId || !taskForm.taskName.trim() || taskForm.status === '') {
       return;
@@ -792,10 +836,29 @@ export function GanttChart({ tasks, holidays, projects, categories }: GanttChart
         status: taskForm.status as TaskStatus,
         startDate: normalized.startDate,
         endDate: normalized.endDate,
-        project: taskForm.project.trim() || undefined,
-        category: taskForm.category.trim() || undefined,
+        project: inheritedParentTask ? inheritedParentTask.project : (taskForm.project.trim() || undefined),
+        category: inheritedParentTask ? inheritedParentTask.category : (taskForm.category.trim() || undefined),
         description,
       });
+
+      if (!normalizedParentTaskId) {
+        const affectedTaskIds = collectDescendantTaskIds(existingTask.taskId, childrenByParentId);
+        const updatedProject = taskForm.project.trim() || undefined;
+        const updatedCategory = taskForm.category.trim() || undefined;
+
+        if (affectedTaskIds.length > 0) {
+          const affectedTaskIdSet = new Set(affectedTaskIds);
+          updateTasks(
+            tasks
+              .filter((task) => affectedTaskIdSet.has(task.taskId))
+              .map((task) => ({
+                ...task,
+                project: updatedProject,
+                category: updatedCategory,
+              })),
+          );
+        }
+      }
     } else {
       const displayOrder = tasks.reduce((max, task) => Math.max(max, task.displayOrder), 0) + 1;
       addTask({
@@ -807,8 +870,8 @@ export function GanttChart({ tasks, holidays, projects, categories }: GanttChart
         endDate: normalized.endDate,
         assignee: undefined,
         priority: undefined,
-        project: taskForm.project.trim() || undefined,
-        category: taskForm.category.trim() || undefined,
+        project: inheritedParentTask ? inheritedParentTask.project : (taskForm.project.trim() || undefined),
+        category: inheritedParentTask ? inheritedParentTask.category : (taskForm.category.trim() || undefined),
         description,
         displayOrder,
       });
@@ -1205,10 +1268,11 @@ export function GanttChart({ tasks, holidays, projects, categories }: GanttChart
       {(editingTaskId || isCreateModalOpen) && (
         <TaskModal
           mode={editingTaskId ? 'edit' : 'create'}
-          values={taskForm}
+          values={modalFormValues}
           editingTask={editingTaskId ? taskById.get(editingTaskId) : undefined}
           projects={projects}
           categories={categories}
+          lockProjectAndCategory={isProjectAndCategoryLocked}
           onChange={handleTaskFormChange}
           onSave={handleSaveTask}
           onDelete={editingTaskId ? handleDeleteTask : undefined}
