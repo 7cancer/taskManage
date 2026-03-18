@@ -1,75 +1,50 @@
-import { ButtonHTMLAttributes, CSSProperties } from 'react';
+import MuiButton, { ButtonProps as MuiButtonProps } from '@mui/material/Button';
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'link' | 'ghost';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends Omit<MuiButtonProps, 'variant' | 'size'> {
   variant?: ButtonVariant;
   size?: ButtonSize;
 }
 
-const BASE_STYLE: CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-  fontFamily: 'inherit',
-  fontWeight: 600,
-  borderRadius: 6,
-  cursor: 'pointer',
-  transition: 'opacity 0.15s',
-  lineHeight: 1.4,
+const SIZE_MAP: Record<ButtonSize, MuiButtonProps['size']> = {
+  sm: 'small',
+  md: 'medium',
+  lg: 'large',
 };
 
-const SIZE_STYLES: Record<ButtonSize, CSSProperties> = {
-  sm: { fontSize: 13, padding: '4px 10px' },
-  md: { fontSize: 14, padding: '6px 14px' },
-  lg: { fontSize: 16, padding: '10px 22px' },
-};
+function mapProps(variant: ButtonVariant, size: ButtonSize): Partial<MuiButtonProps> {
+  const mapped: Partial<MuiButtonProps> = { size: SIZE_MAP[size] };
 
-const VARIANT_STYLES: Record<ButtonVariant, CSSProperties> = {
-  primary: {
-    background: '#16a34a',
-    color: '#fff',
-    border: '1px solid #15803d',
-  },
-  secondary: {
-    background: '#fff',
-    color: '#334155',
-    border: '1px solid #cbd5e1',
-  },
-  danger: {
-    background: '#fff',
-    color: '#b91c1c',
-    border: '1px solid #fca5a5',
-  },
-  link: {
-    background: 'transparent',
-    color: '#2563eb',
-    border: 'none',
-    padding: 0,
-    textDecoration: 'underline',
-    fontWeight: 400,
-  },
-  ghost: {
-    background: 'transparent',
-    color: '#475569',
-    border: '1px solid transparent',
-  },
-};
+  switch (variant) {
+    case 'primary':
+      mapped.variant = 'contained';
+      mapped.color = 'primary';
+      break;
+    case 'secondary':
+      mapped.variant = 'outlined';
+      mapped.color = 'inherit';
+      break;
+    case 'danger':
+      mapped.variant = 'outlined';
+      mapped.color = 'error';
+      break;
+    case 'link':
+      mapped.variant = 'text';
+      mapped.color = 'primary';
+      break;
+    case 'ghost':
+      mapped.variant = 'text';
+      mapped.color = 'inherit';
+      break;
+  }
 
-const DISABLED_STYLE: CSSProperties = {
-  opacity: 0.5,
-  cursor: 'not-allowed',
-};
+  return mapped;
+}
 
-export function Button({ variant = 'secondary', size = 'md', style, disabled, ...rest }: ButtonProps) {
-  const merged: CSSProperties = {
-    ...BASE_STYLE,
-    ...SIZE_STYLES[size],
-    ...VARIANT_STYLES[variant],
-    ...(disabled ? DISABLED_STYLE : {}),
-    ...style,
-  };
+export function Button({ variant = 'secondary', size = 'md', ...rest }: ButtonProps) {
+  const muiProps = mapProps(variant, size);
 
-  return <button type="button" disabled={disabled} style={merged} {...rest} />;
+  return <MuiButton disableElevation {...muiProps} {...rest} />;
 }

@@ -1,4 +1,20 @@
-import { CSSProperties, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import Box from '@mui/material/Box';
+import TextField from '@mui/material/TextField';
+import MenuItem from '@mui/material/MenuItem';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { TASK_STATUS_LABELS, TASK_STATUS_ORDER } from '../../domain/task/constants';
 import { Task, TaskStatus } from '../../domain/task/types';
 import { CsvImportDialog } from '../../features/csv-import/components/CsvImportDialog';
@@ -13,31 +29,11 @@ import { Sidebar, SidebarSection } from '../../shared/ui/Sidebar';
 import { Button } from '../../shared/ui/Button';
 import { ListManager } from '../../shared/ui/ListManager';
 
-const LIST_STYLE: CSSProperties = { padding: 12, background: '#fff', borderRadius: 8, marginTop: 12 };
-const CONTROL_BAR_STYLE: CSSProperties = {
-  marginTop: 12,
-  display: 'grid',
-  gridTemplateColumns: '2fr 1fr 1fr 1fr',
-  gap: 8,
-  alignItems: 'center',
-};
-const TABLE_STYLE: CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: 13 };
-const TH_STYLE: CSSProperties = {
-  textAlign: 'left',
-  padding: '8px 10px',
-  borderBottom: '1px solid #cbd5e1',
-  background: '#f8fafc',
-  position: 'sticky',
-  top: 0,
-  zIndex: 1,
-};
-const TD_STYLE: CSSProperties = { padding: '8px 10px', borderBottom: '1px solid #e2e8f0', verticalAlign: 'top' };
-
-const STATUS_BADGE_STYLES: Record<TaskStatus, CSSProperties> = {
-  todo: { background: '#e2e8f0', color: '#1e293b' },
-  inProgress: { background: '#dbeafe', color: '#1d4ed8' },
-  review: { background: '#fef3c7', color: '#b45309' },
-  done: { background: '#dcfce7', color: '#166534' },
+const STATUS_CHIP_COLORS: Record<TaskStatus, 'default' | 'primary' | 'warning' | 'success' | 'info'> = {
+  todo: 'default',
+  inProgress: 'info',
+  review: 'warning',
+  done: 'success',
 };
 
 const VIEW_TABS: TabItem[] = [
@@ -264,12 +260,6 @@ export function MainRoute() {
   const [selectedProject, setSelectedProject] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [sortKey, setSortKey] = useState<SortKey>('displayOrder');
-  const [openSections, setOpenSections] = useState<Record<TaskStatus, boolean>>({
-    todo: false,
-    inProgress: true,
-    review: true,
-    done: true,
-  });
 
   const filteredTasks = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -319,10 +309,6 @@ export function MainRoute() {
     downloadCsv(serializeTasksToCsv(dummyTasks, meta), 'project-template.csv');
   }
 
-  function handleToggleSection(status: TaskStatus) {
-    setOpenSections((prev) => ({ ...prev, [status]: !prev[status] }));
-  }
-
   const sidebarContent = (
     <Sidebar>
       <SidebarSection title="CSV取込・保存" defaultOpen>
@@ -338,12 +324,12 @@ export function MainRoute() {
         <ListManager title="カテゴリ" items={categories} onUpdate={handleUpdateCategories} />
       </SidebarSection>
       <SidebarSection title="サンプルデータ">
-        <Button variant="secondary" size="sm" onClick={handleCreateProject} style={{ width: '100%' }}>
+        <Button variant="secondary" size="sm" onClick={handleCreateProject} sx={{ width: '100%' }}>
           サンプル作成
         </Button>
-        <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>
+        <Typography variant="caption" color="text.secondary">
           ダミーデータを作成しCSVテンプレートをダウンロードします。
-        </p>
+        </Typography>
       </SidebarSection>
     </Sidebar>
   );
@@ -356,137 +342,130 @@ export function MainRoute() {
         <GanttChart tasks={tasks} holidays={holidays} projects={projects} categories={categories} />
       ) : (
         <>
-          <section style={CONTROL_BAR_STYLE}>
-            <input
+          <Box sx={{ mt: 1.5, display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 1, alignItems: 'center' }}>
+            <TextField
+              size="small"
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="ID・タスク名・説明で検索"
-              style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1' }}
             />
-            <select
+            <TextField
+              size="small"
+              select
               value={selectedProject}
               onChange={(event) => setSelectedProject(event.target.value)}
-              style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1' }}
             >
-              <option value="all">全プロジェクト</option>
+              <MenuItem value="all">全プロジェクト</MenuItem>
               {projects.map((project) => (
-                <option key={project} value={project}>
+                <MenuItem key={project} value={project}>
                   {project}
-                </option>
+                </MenuItem>
               ))}
-            </select>
-            <select
+            </TextField>
+            <TextField
+              size="small"
+              select
               value={selectedCategory}
               onChange={(event) => setSelectedCategory(event.target.value)}
-              style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1' }}
             >
-              <option value="all">全カテゴリ</option>
+              <MenuItem value="all">全カテゴリ</MenuItem>
               {categories.map((category) => (
-                <option key={category} value={category}>
+                <MenuItem key={category} value={category}>
                   {category}
-                </option>
+                </MenuItem>
               ))}
-            </select>
-            <select
+            </TextField>
+            <TextField
+              size="small"
+              select
               value={sortKey}
               onChange={(event) => setSortKey(event.target.value as SortKey)}
-              style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1' }}
             >
-              <option value="displayOrder">並び順（CSV順）</option>
-              <option value="startDate">開始日順</option>
-              <option value="endDate">終了日順</option>
-            </select>
-          </section>
+              <MenuItem value="displayOrder">並び順（CSV順）</MenuItem>
+              <MenuItem value="startDate">開始日順</MenuItem>
+              <MenuItem value="endDate">終了日順</MenuItem>
+            </TextField>
+          </Box>
 
-          <section style={LIST_STYLE}>
-            <h2 style={{ marginTop: 0 }}>読込済みタスク（一覧）</h2>
-            <p style={{ marginTop: 4, color: '#475569' }}>
+          <Paper sx={{ mt: 1.5, p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              読込済みタスク（一覧）
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
               表示件数: {filteredTasks.length} / 全件: {tasks.length}
-            </p>
+            </Typography>
 
             {TASK_STATUS_ORDER.map((status) => {
               const statusTasks = groupedTasks[status];
-              const isOpen = openSections[status];
 
               return (
-                <div key={status} style={{ marginTop: 12, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleSection(status)}
-                    aria-expanded={isOpen}
-                    style={{
-                      width: '100%',
-                      border: 'none',
-                      background: '#f8fafc',
-                      padding: '10px 12px',
-                      fontSize: 14,
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {isOpen ? '▼' : '▶'} {TASK_STATUS_LABELS[status]} ({statusTasks.length})
-                  </button>
-
-                  {isOpen && (statusTasks.length === 0 ? (
-                    <p style={{ margin: 0, padding: 12, opacity: 0.7 }}>タスクなし</p>
-                  ) : (
-                    <div style={{ maxHeight: 360, overflow: 'auto' }}>
-                      <table style={TABLE_STYLE}>
-                        <thead>
-                          <tr>
-                            <th style={TH_STYLE}>ID</th>
-                            <th style={TH_STYLE}>タスク名</th>
-                            <th style={TH_STYLE}>ステータス</th>
-                            <th style={TH_STYLE}>開始</th>
-                            <th style={TH_STYLE}>終了</th>
-                            <th style={TH_STYLE}>PJ</th>
-                            <th style={TH_STYLE}>カテゴリ</th>
-                            <th style={TH_STYLE}>詳細</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {statusTasks.map((task) => (
-                            <tr key={task.taskId}>
-                              <td style={TD_STYLE}>{task.taskId}</td>
-                              <td style={TD_STYLE}>{task.taskName}</td>
-                              <td style={TD_STYLE}>
-                                <span
-                                  style={{
-                                    ...STATUS_BADGE_STYLES[task.status],
-                                    borderRadius: 999,
-                                    padding: '2px 8px',
-                                    fontSize: 12,
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  {TASK_STATUS_LABELS[task.status]}
-                                </span>
-                              </td>
-                              <td style={TD_STYLE}>{task.startDate}</td>
-                              <td style={TD_STYLE}>{task.endDate}</td>
-                              <td style={TD_STYLE}>{task.project ?? '-'}</td>
-                              <td style={TD_STYLE}>{task.category ?? '-'}</td>
-                              <td style={TD_STYLE}>
-                                {task.description ? (
-                                  <details>
-                                    <summary style={{ cursor: 'pointer' }}>表示</summary>
-                                    <p style={{ marginBottom: 0, whiteSpace: 'pre-wrap', color: '#475569' }}>{task.description}</p>
-                                  </details>
-                                ) : (
-                                  '-'
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ))}
-                </div>
+                <Accordion key={status} defaultExpanded={status !== 'todo'} disableGutters>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Typography variant="subtitle2">
+                      {TASK_STATUS_LABELS[status]} ({statusTasks.length})
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ p: 0 }}>
+                    {statusTasks.length === 0 ? (
+                      <Typography variant="body2" sx={{ p: 2, opacity: 0.7 }}>
+                        タスクなし
+                      </Typography>
+                    ) : (
+                      <TableContainer sx={{ maxHeight: 360 }}>
+                        <Table size="small" stickyHeader>
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>ID</TableCell>
+                              <TableCell>タスク名</TableCell>
+                              <TableCell>ステータス</TableCell>
+                              <TableCell>開始</TableCell>
+                              <TableCell>終了</TableCell>
+                              <TableCell>PJ</TableCell>
+                              <TableCell>カテゴリ</TableCell>
+                              <TableCell>詳細</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {statusTasks.map((task) => (
+                              <TableRow key={task.taskId} hover>
+                                <TableCell>{task.taskId}</TableCell>
+                                <TableCell>{task.taskName}</TableCell>
+                                <TableCell>
+                                  <Chip
+                                    label={TASK_STATUS_LABELS[task.status]}
+                                    size="small"
+                                    color={STATUS_CHIP_COLORS[task.status]}
+                                    sx={{ fontWeight: 600, fontSize: 12 }}
+                                  />
+                                </TableCell>
+                                <TableCell>{task.startDate}</TableCell>
+                                <TableCell>{task.endDate}</TableCell>
+                                <TableCell>{task.project ?? '-'}</TableCell>
+                                <TableCell>{task.category ?? '-'}</TableCell>
+                                <TableCell>
+                                  {task.description ? (
+                                    <details>
+                                      <summary style={{ cursor: 'pointer' }}>表示</summary>
+                                      <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', mt: 0.5 }}>
+                                        {task.description}
+                                      </Typography>
+                                    </details>
+                                  ) : (
+                                    '-'
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    )}
+                  </AccordionDetails>
+                </Accordion>
               );
             })}
-          </section>
+          </Paper>
         </>
       )}
     </MainLayout>
