@@ -1,4 +1,6 @@
 import { ChangeEvent, useMemo, useRef, useState } from 'react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 import { TaskMeta } from '../../../domain/task/meta';
 import { importTasksFromCsvText } from '../../../store/actions/taskImport';
 import { CsvFileHandle, persistTasksToCsvFile, serializeTasksToCsv, setCsvExportFileHandle } from '../../../store/actions/taskPersistence';
@@ -226,43 +228,43 @@ export function CsvImportDialog() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <Button variant="secondary" size="sm" onClick={handleSelectCsv} style={{ width: '100%' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <Button variant="secondary" size="sm" onClick={handleSelectCsv} sx={{ width: '100%' }}>
         ファイルを選択
       </Button>
       <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleFileChange} style={{ display: 'none' }} />
 
       {preview && (
         <>
-          <Button variant="secondary" size="sm" onClick={handleExportToCsv} style={{ width: '100%' }}>
+          <Button variant="secondary" size="sm" onClick={handleExportToCsv} sx={{ width: '100%' }}>
             CSVエクスポート
           </Button>
-          <Button variant="primary" size="sm" onClick={handleSave} style={{ width: '100%' }}>
+          <Button variant="primary" size="sm" onClick={handleSave} sx={{ width: '100%' }}>
             Save
           </Button>
         </>
       )}
 
       {saveMessage && (
-        <p style={{ color: '#166534', margin: 0, fontSize: 12 }} role="status">
+        <Typography variant="caption" color="success.main" role="status">
           {saveMessage}
-        </p>
+        </Typography>
       )}
 
       {errorMessage && (
-        <p style={{ color: '#b91c1c', margin: 0, fontSize: 12 }} role="alert">
+        <Typography variant="caption" color="error" role="alert">
           {errorMessage}
-        </p>
+        </Typography>
       )}
 
       {preview && (
-        <div style={{ fontSize: 12, color: '#475569' }}>
-          <p style={{ margin: '2px 0' }}>{summaryText}</p>
-          <p style={{ margin: '2px 0' }}>
+        <Box sx={{ fontSize: 12, color: 'text.secondary' }}>
+          <Typography variant="caption" display="block">{summaryText}</Typography>
+          <Typography variant="caption" display="block">
             {preview.importedCount}件成功 / {preview.errorCount}件エラー
-          </p>
-        </div>
+          </Typography>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
