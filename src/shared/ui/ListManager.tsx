@@ -1,4 +1,11 @@
 import { useState } from 'react';
+import Box from '@mui/material/Box';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import ListItemText from '@mui/material/ListItemText';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import DialogContentText from '@mui/material/DialogContentText';
 import { Button } from './Button';
 import { Modal } from './Modal';
 
@@ -34,78 +41,59 @@ export function ListManager({ title, items, onUpdate }: ListManagerProps) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', gap: 4 }}>
-        <input
-          type="text"
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <Box sx={{ display: 'flex', gap: 0.5 }}>
+        <TextField
+          size="small"
           value={newItem}
           onChange={(e) => setNewItem(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={`${title}名を入力`}
-          style={{ flex: 1, padding: '4px 8px', fontSize: 13 }}
+          sx={{ flex: 1 }}
         />
         <Button variant="primary" size="sm" onClick={handleAdd} disabled={newItem.trim().length === 0}>
           追加
         </Button>
-      </div>
+      </Box>
       {items.length === 0 ? (
-        <p style={{ margin: 0, fontSize: 12, color: '#94a3b8' }}>
+        <Typography variant="caption" color="text.secondary">
           {title}が未登録です。
-        </p>
+        </Typography>
       ) : (
-        <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <List dense disablePadding>
           {items.map((item) => (
-            <li
+            <ListItem
               key={item}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 6,
-                padding: '4px 8px',
-                background: '#f8fafc',
-                borderRadius: 4,
-                border: '1px solid #e2e8f0',
-                fontSize: 13,
-              }}
+              secondaryAction={
+                <Button variant="danger" size="sm" onClick={() => setPendingDeleteItem(item)} sx={{ minWidth: 'auto', px: 1, fontSize: 11 }}>
+                  削除
+                </Button>
+              }
+              sx={{ bgcolor: 'grey.50', borderRadius: 1, border: 1, borderColor: 'divider', mb: 0.5 }}
             >
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item}</span>
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={() => setPendingDeleteItem(item)}
-                style={{ flexShrink: 0, padding: '2px 6px', fontSize: 11 }}
-              >
-                削除
-              </Button>
-            </li>
+              <ListItemText primary={item} primaryTypographyProps={{ fontSize: 13, noWrap: true }} />
+            </ListItem>
           ))}
-        </ul>
+        </List>
       )}
 
-      {pendingDeleteItem && (
-        <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.35)', display: 'grid', placeItems: 'center', zIndex: 2000 }}
-          onClick={() => setPendingDeleteItem(null)}
-        >
-          <div onClick={(e) => e.stopPropagation()}>
-            <Modal>
-              <div style={{ background: '#fff', width: 'min(420px, 92vw)', borderRadius: 12, padding: 24 }}>
-                <h3 style={{ marginTop: 0 }}>確認</h3>
-                <p style={{ marginTop: 0 }}>「{pendingDeleteItem}」を本当に削除しますか？</p>
-                <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                  <Button variant="secondary" onClick={() => setPendingDeleteItem(null)}>
-                    キャンセル
-                  </Button>
-                  <Button variant="danger" onClick={() => handleDelete(pendingDeleteItem)}>
-                    削除
-                  </Button>
-                </div>
-              </div>
-            </Modal>
-          </div>
-        </div>
-      )}
-    </div>
+      <Modal
+        open={pendingDeleteItem !== null}
+        onClose={() => setPendingDeleteItem(null)}
+        title="確認"
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setPendingDeleteItem(null)}>
+              キャンセル
+            </Button>
+            <Button variant="danger" onClick={() => pendingDeleteItem && handleDelete(pendingDeleteItem)}>
+              削除
+            </Button>
+          </>
+        }
+      >
+        <DialogContentText>「{pendingDeleteItem}」を本当に削除しますか？</DialogContentText>
+      </Modal>
+    </Box>
   );
 }

@@ -1,4 +1,9 @@
 import { ReactNode } from 'react';
+import AppBar from '@mui/material/AppBar';
+import Toolbar from '@mui/material/Toolbar';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import Box from '@mui/material/Box';
 import { APP_VERSION } from '../version';
 
 interface MainLayoutProps {
@@ -8,28 +13,26 @@ interface MainLayoutProps {
 
 export function MainLayout({ sidebar, children }: MainLayoutProps) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <header style={{ padding: '8px 16px', borderBottom: '1px solid #e2e8f0', background: '#fff', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <h1 style={{ margin: 0, fontSize: 18 }}>Offline Task Manager</h1>
-        <span
-          style={{
-            background: '#0f172a',
-            color: '#fff',
-            fontSize: 11,
-            padding: '2px 8px',
-            borderRadius: 999,
-            lineHeight: 1.4,
-          }}
-        >
-          v{APP_VERSION}
-        </span>
-      </header>
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <AppBar position="static" color="default" elevation={1}>
+        <Toolbar variant="dense">
+          <Typography variant="h6" component="h1" sx={{ fontSize: 18, fontWeight: 700 }}>
+            Offline Task Manager
+          </Typography>
+          <Chip
+            label={`v${APP_VERSION}`}
+            size="small"
+            color="secondary"
+            sx={{ ml: 1.5, height: 22, fontSize: 11 }}
+          />
+        </Toolbar>
+      </AppBar>
+      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {sidebar}
-        <main style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+        <Box component="main" sx={{ flex: 1, overflow: 'auto', p: 2 }}>
           {children}
-        </main>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Box>
   );
 }
